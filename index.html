@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O Guardião do Porão - Crônicas do Alçapão</title>
+    <title>O Guardião do Porão</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;900&display=swap');
 
@@ -32,11 +32,10 @@
             height: 100vh;
         }
 
-        #bg {
-            position: absolute;
+        canvas {
+            display: block;
             width: 100%;
             height: 100%;
-            z-index: 1;
         }
 
         /* UI */
@@ -61,7 +60,7 @@
         .slot {
             width: 60px;
             height: 60px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             border: 2px solid #333;
             border-radius: 12px;
             display: flex;
@@ -78,12 +77,11 @@
         }
 
         #mission-log {
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             border-radius: 10px;
             border-left: 4px solid var(--accent);
-            max-width: 250px;
-            pointer-events: all;
+            max-width: 300px;
         }
 
         #mission-log h3 {
@@ -103,18 +101,19 @@
             bottom: 15%;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
+            background: #000;
             padding: 15px 40px;
             border-radius: 50px;
             border: 1px solid var(--accent);
             text-align: center;
             display: none;
             z-index: 20;
+            color: #fff;
         }
 
         #dialog.show {
             display: block;
-            animation: fInOut 3s forwards;
+            animation: fInOut 4s forwards;
         }
 
         #fade-overlay {
@@ -150,8 +149,25 @@
             background: #000;
             z-index: 100;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+        }
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 3px solid transparent;
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 20px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
     <script
@@ -170,8 +186,8 @@
                     <div class="slot" id="s3"></div>
                 </div>
                 <div id="mission-log">
-                    <h3>Missão Ativa</h3>
-                    <p id="goal-text">Encontre itens no porão para abrir as salas trancadas.</p>
+                    <h3>Objetivo</h3>
+                    <p id="goal-text">Entre em uma das três salas para enfrentar os desafios e obter as armas.</p>
                 </div>
             </div>
             <div id="dialog"></div>
@@ -179,276 +195,272 @@
             </div>
         </div>
         <div id="loading">
-            <h1>Carregando Porão...</h1>
+            <h1>O Guardião do Porão</h1>
+            <div class="loader"></div>
         </div>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
 
-        // --- SETUP INICIAL ---
+        // --- SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0)); // Iluminação clara
 
-        const ambLight = new THREE.AmbientLight(0xffffff, 0.9);
-        scene.add(ambLight);
-
-        // --- ESTADO GLOBAL ---
         const state = {
-            currentScene: 'HUB', // 'HUB', 'ROOM1', 'ROOM2', 'ROOM3', 'ARENA'
-            items: [],
-            weapons: [],
-            currentWpn: -1,
-            targetCamPos: new THREE.Vector3(0, 15, 15),
-            targetLookAt: new THREE.Vector3(0, 0, 0),
-            transitioning: false
+            scene: 'HUB', weapons: [], currentWpn: -1, transitioning: false,
+            p1: { seq: [], correct: [1, 3, 0, 2] },
+            p2: { step: 0 },
+            bossHeads: [100, 100, 100]
         };
 
         const player = {
-            mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.3), new THREE.MeshStandardMaterial({ color: 0x55ccff })),
-            pos: new THREE.Vector3(0, 1, 0),
-            speed: 0.2
+            mesh: new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2), new THREE.MeshStandardMaterial({ color: 0x55ccff })),
+            pos: new THREE.Vector3(0, 1, 0)
         };
         scene.add(player.mesh);
 
-        // --- GERENCIADOR DE CENAS ---
         const interactables = [];
-        function clearScene() {
-            const toRemove = [];
-            scene.traverse(child => {
-                if (child.userData.dynamic) toRemove.push(child);
-            });
-            toRemove.forEach(obj => scene.remove(obj));
-            interactables.length = 0;
-        }
 
-        async function transitionTo(sceneName) {
-            if (state.transitioning) return;
+        // --- GERENCIADOR DE FASES ---
+        async function loadPhase(p) {
             state.transitioning = true;
-            const fade = document.getElementById('fade-overlay');
-            fade.style.opacity = '1';
-
+            document.getElementById('fade-overlay').style.opacity = '1';
             await new Promise(r => setTimeout(r, 800));
 
-            clearScene();
-            state.currentScene = sceneName;
+            // Limpa cena anterior
+            const toRemove = [];
+            scene.traverse(c => { if (c.userData.dynamic) toRemove.push(c); });
+            toRemove.forEach(o => scene.remove(o));
+            interactables.length = 0;
 
-            if (sceneName === 'HUB') loadHub();
-            else if (sceneName.startsWith('ROOM')) loadRoom(sceneName.replace('ROOM', ''));
-            else if (sceneName === 'ARENA') loadArena();
+            state.scene = p;
+            if (p === 'HUB') buildHub();
+            else if (p === 'SALA1') buildSala1();
+            else if (p === 'SALA2') buildSala2();
+            else if (p === 'SALA3') buildSala3();
+            else if (p === 'ARENA') buildArena();
 
-            fade.style.opacity = '0';
+            document.getElementById('fade-overlay').style.opacity = '0';
             state.transitioning = false;
         }
 
-        // --- CENÁRIOS ---
-        function loadHub() {
-            // Chão
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
+        function createFloor(w, h, col) {
+            const f = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: col }));
+            f.rotation.x = -Math.PI / 2; f.userData.dynamic = true; scene.add(f);
+        }
 
-            // Alçapão
-            const tp = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 5), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            tp.position.set(0, 0, 0); tp.userData = { dynamic: true, type: 'trapdoor' };
-            scene.add(tp); interactables.push(tp);
+        // --- HUB ---
+        function buildHub() {
+            createFloor(40, 40, 0x222222);
+            player.pos.set(0, 1, 10);
 
             // Portas
-            createGate(-15, 0, 'Alavanca', 'ROOM1', 0xaa55ff);
-            createGate(15, 0, 'Código', 'ROOM2', 0x55ffaa);
-            createGate(0, -15, 'Manopla', 'ROOM3', 0xffaa55);
+            const doors = [
+                { x: -15, z: 0, target: 'SALA1', col: 0xff4444, label: 'SALA 1: ALAVANCAS' },
+                { x: 15, z: 0, target: 'SALA2', col: 0x44ff44, label: 'SALA 2: SÍMBOLOS' },
+                { x: 0, z: -15, target: 'SALA3', col: 0x4444ff, label: 'SALA 3: LUZ' }
+            ];
+            doors.forEach(d => {
+                const g = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 0.5), new THREE.MeshStandardMaterial({ color: d.col }));
+                g.position.set(d.x, 3, d.z); if (d.x !== 0) g.rotation.y = Math.PI / 2;
+                g.userData = { dynamic: true, type: 'door', target: d.target, msg: d.label };
+                scene.add(g); interactables.push(g);
+            });
 
-            // Itens
-            createItem(8, 8, 'Alavanca de Ferro', 0xff0000);
-            createItem(-8, 5, 'Código Antigo', 0x00ff00);
-            createItem(4, -10, 'Manopla Rúnica', 0x0000ff);
+            // Alçapão
+            const tp = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            tp.userData = { dynamic: true, type: 'trapdoor' };
+            scene.add(tp); interactables.push(tp);
 
-            player.pos.set(0, 1, 5);
-            updateLog("Hub Central: Encontre os itens espalhados para abrir as salas.");
+            updateGoal("Explore as salas laterais para obter as 3 armas.");
         }
 
-        function loadRoom(id) {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: 0x221144 }));
-            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
+        // --- SALA 1: PUZZLE ALAVANCAS ---
+        function buildSala1() {
+            createFloor(20, 30, 0x331111);
+            player.pos.set(0, 1, 12);
+            for (let i = 0; i < 4; i++) {
+                const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2, 0.2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+                l.position.set(-6 + i * 4, 1, -5);
+                l.userData = { dynamic: true, type: 'lever', id: i };
+                scene.add(l); interactables.push(l);
+            }
+            createExit();
+        }
 
-            const prize = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.4), new THREE.MeshStandardMaterial({ color: 0xd4af37, emissive: 0x554400 }));
-            prize.position.set(0, 2, -5); prize.userData = { dynamic: true, type: 'weapon', id: id };
+        // --- SALA 2: PUZZLE SÍMBOLOS ---
+        function buildSala2() {
+            createFloor(20, 30, 0x113311);
+            player.pos.set(0, 1, 12);
+            // Símbolos nas paredes (Cubos coloridos) e placas no chão
+            for (let i = 0; i < 3; i++) {
+                const plate = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 3), new THREE.MeshStandardMaterial({ color: 0x555555 }));
+                plate.position.set(-5 + i * 5, 0.05, 0);
+                plate.userData = { dynamic: true, type: 'plate', id: i };
+                scene.add(plate); interactables.push(plate);
+
+                const sign = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.5), new THREE.MeshStandardMaterial({ color: [0x00ffff, 0xff00ff, 0xffff00][i] }));
+                sign.position.set(-5 + i * 5, 4, -10); sign.userData = { dynamic: true };
+                scene.add(sign);
+            }
+            createExit();
+        }
+
+        // --- SALA 3: LABIRINTO LUZ ---
+        let lightBeams = [];
+        function buildSala3() {
+            createFloor(20, 60, 0x111133);
+            player.pos.set(0, 1, 25);
+            lightBeams = [];
+            for (let i = 0; i < 5; i++) {
+                const b = new THREE.Mesh(new THREE.BoxGeometry(20, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff }));
+                b.position.set(0, 1, 15 - i * 8);
+                b.userData = { dynamic: true, originX: 0 };
+                scene.add(b); lightBeams.push(b);
+            }
+            const prize = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshStandardMaterial({ color: 0xd4af37 }));
+            prize.position.set(0, 1.5, -25); prize.userData = { dynamic: true, type: 'prize', id: 3 };
             scene.add(prize); interactables.push(prize);
-
-            const exit = new THREE.Mesh(new THREE.BoxGeometry(3, 4, 1), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-            exit.position.set(0, 2, 12); exit.userData = { dynamic: true, type: 'exit' };
-            scene.add(exit); interactables.push(exit);
-
-            player.pos.set(0, 1, 10);
-            updateLog(`Sala ${id}: Pegue a relíquia no centro.`);
+            createExit();
         }
 
+        // --- ARENA DO CÉRBERO ---
         let boss;
-        const heads = [];
-        function loadArena() {
-            const floor = new THREE.Mesh(new THREE.CircleGeometry(25, 32), new THREE.MeshStandardMaterial({ color: 0x1a0a0a }));
-            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
-
-            boss = new THREE.Group();
-            boss.userData.dynamic = true;
+        const bHeads = [];
+        function buildArena() {
+            createFloor(40, 40, 0x000000);
+            boss = new THREE.Group(); boss.userData.dynamic = true;
             const body = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 8), new THREE.MeshStandardMaterial({ color: 0x440000 }));
             boss.add(body);
             const colors = [0xff0000, 0x00ff00, 0x0000ff];
             for (let i = 0; i < 3; i++) {
                 const h = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshStandardMaterial({ color: colors[i] }));
-                h.position.set(-2.5 + i * 2.5, 3.5, 4.5);
-                h.userData = { hp: 100, id: i };
-                boss.add(h); heads.push(h);
+                h.position.set(-2.5 + i * 2.5, 4, 4); h.userData = { id: i, hp: 100 };
+                boss.add(h); bHeads.push(h);
             }
-            boss.position.set(0, 2, -10);
-            scene.add(boss);
-
+            boss.position.set(0, 2, -10); scene.add(boss);
             player.pos.set(0, 1, 15);
-            updateLog("Arena Final: Use 1, 2, 3 para trocar de arma e ESPAÇO para atacar!");
+            updateGoal("BATALHA FINAL: Derrote as 3 cabeças. Troque as armas com 1, 2, 3.");
         }
 
-        // --- HELPERS ---
-        function createGate(x, z, req, target, col) {
-            const g = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 1), new THREE.MeshStandardMaterial({ color: col, transparent: true, opacity: 0.8 }));
-            g.position.set(x, 3, z);
-            if (x !== 0) g.rotation.y = Math.PI / 2;
-            g.userData = { dynamic: true, type: 'gate', req: req, target: target };
-            scene.add(g); interactables.push(g);
+        function createExit() {
+            const e = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 1), new THREE.MeshStandardMaterial({ color: 0x444444 }));
+            e.position.set(0, 3, 14); e.userData = { dynamic: true, type: 'exit' };
+            scene.add(e); interactables.push(e);
         }
 
-        function createItem(x, z, name, col) {
-            const i = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: col, emissive: col }));
-            i.position.set(x, 1, z);
-            i.userData = { dynamic: true, type: 'item', name: name };
-            scene.add(i); interactables.push(i);
+        // --- LÓGICA DE INTERAÇÃO ---
+        function interact() {
+            interactables.forEach(obj => {
+                if (player.mesh.position.distanceTo(obj.position) < 3.5) {
+                    if (obj.userData.type === 'door') transitionToPhase(obj.userData.target);
+                    else if (obj.userData.type === 'exit') transitionToPhase('HUB');
+                    else if (obj.userData.type === 'lever') solveP1(obj);
+                    else if (obj.userData.type === 'plate') solveP2(obj);
+                    else if (obj.userData.type === 'prize') getWpn(obj.userData.id);
+                    else if (obj.userData.type === 'trapdoor') {
+                        if (state.weapons.length === 3) transitionToPhase('ARENA');
+                        else msg("O alçapão está trancado. Obtenha as 3 armas!");
+                    }
+                }
+            });
+            if (state.scene === 'ARENA') attackBoss();
         }
 
-        function msg(t) {
-            const d = document.getElementById('dialog');
-            d.innerText = t; d.classList.remove('show'); void d.offsetWidth; d.classList.add('show');
+        function solveP1(l) {
+            if (l.material.color.getHex() === 0x00ff00) return;
+            l.material.color.set(0x00ff00);
+            state.p1.seq.push(l.userData.id);
+            if (state.p1.seq.length === 4) {
+                if (JSON.stringify(state.p1.seq) === JSON.stringify(state.p1.correct)) {
+                    msg("SEQUÊNCIA CORRETA! FACA OBTIDA!"); getWpn(1);
+                } else {
+                    msg("ERROU! AS ALAVANCAS RESETARAM."); state.p1.seq = [];
+                    interactables.filter(o => o.userData.type === 'lever').forEach(o => o.material.color.set(0xff0000));
+                }
+            }
         }
 
-        function updateLog(t) { document.getElementById('goal-text').innerText = t; }
+        function solveP2(p) {
+            if (p.userData.id === state.p2.step) {
+                p.material.color.set(0x00ffff); state.p2.step++;
+                if (state.p2.step === 3) { msg("SÍMBOLOS RECONHECIDOS! PISTOLA OBTIDA!"); getWpn(2); }
+            } else {
+                msg("SINAL INCORRETO!"); state.p2.step = 0;
+                interactables.filter(o => o.userData.type === 'plate').forEach(o => o.material.color.set(0x555555));
+            }
+        }
 
-        // --- SISTEMA DE CÂMERA E MOVIMENTO ---
-        const keys = {};
+        function getWpn(id) {
+            const names = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
+            const icons = ["🗡️", "🔫", "🔮"];
+            if (!state.weapons.includes(names[id - 1])) {
+                state.weapons.push(names[id - 1]);
+                document.getElementById('s' + id).innerText = icons[id - 1];
+                msg("Você obteve: " + names[id - 1]);
+            }
+        }
+
+        function attackBoss() {
+            if (state.currentWpn === -1) return;
+            bHeads.forEach(h => {
+                const wPos = new THREE.Vector3(); h.getWorldPosition(wPos);
+                if (player.mesh.position.distanceTo(wPos) < 10 && h.visible) {
+                    const w = state.weapons[state.currentWpn];
+                    let hit = (h.userData.id === 0 && w.includes("Faca")) || (h.userData.id === 1 && w.includes("Pistola")) || (h.userData.id === 2 && w.includes("Cetro"));
+                    if (hit) { h.userData.hp -= 34; h.scale.multiplyScalar(0.85); msg("DANO!"); if (h.userData.hp <= 0) h.visible = false; }
+                    else msg("ARMA ERRADA!");
+                }
+            });
+            if (bHeads.every(h => !h.visible)) { msg("VITÓRIA! O CÉRBERO CAIU!"); setTimeout(() => location.reload(), 6000); }
+        }
+
+        // --- LOOP PRINCIPAL ---
+        function update() {
+            if (state.transitioning) return;
+
+            // Movimento simples
+            if (keys.w) player.pos.z -= 0.2; if (keys.s) player.pos.z += 0.2;
+            if (keys.a) player.pos.x -= 0.2; if (keys.d) player.pos.x += 0.2;
+            player.mesh.position.copy(player.pos);
+
+            // Câmera clássica direta
+            camera.position.lerp(new THREE.Vector3(player.pos.x, 15, player.pos.z + 12), 0.1);
+            camera.lookAt(player.pos);
+
+            // Sala 3: Obstáculos de Luz
+            if (state.scene === 'SALA3') {
+                lightBeams.forEach((b, i) => {
+                    b.position.x = Math.sin(Date.now() * 0.002 + i) * 10;
+                    if (player.mesh.position.distanceTo(b.position) < 2) {
+                        msg("A LUZ TE EXPULSOU!"); player.pos.set(0, 1, 25);
+                    }
+                });
+            }
+            if (state.scene === 'ARENA' && boss) boss.position.x = Math.sin(Date.now() * 0.002) * 10;
+        }
+
+        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
+        function msg(t) { const d = document.getElementById('dialog'); d.innerText = t; d.classList.remove('show'); void d.offsetWidth; d.classList.add('show'); }
+        function updateGoal(t) { document.getElementById('goal-text').innerText = t; }
+        function transitionToPhase(p) { loadPhase(p); }
+        function selectWeapon(i) { if (i < state.weapons.length) { state.currentWpn = i; document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i)); } }
+
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
             if (e.key === ' ') interact();
             if (['1', '2', '3'].includes(e.key)) selectWeapon(parseInt(e.key) - 1);
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
-        function interact() {
-            interactables.forEach(obj => {
-                if (player.mesh.position.distanceTo(obj.position) < 4) {
-                    if (obj.userData.type === 'item') {
-                        state.items.push(obj.userData.name.split(' ')[0]); // Pega só a primeira palavra
-                        msg("Coletado: " + obj.userData.name);
-                        obj.visible = false;
-                    }
-                    else if (obj.userData.type === 'gate') {
-                        if (state.items.includes(obj.userData.req)) transitionTo(obj.userData.target);
-                        else msg("Bloqueado! Precisa de: " + obj.userData.req);
-                    }
-                    else if (obj.userData.type === 'weapon') {
-                        const wpns = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
-                        const icons = ["🗡️", "🔫", "🔮"];
-                        const id = parseInt(obj.userData.id) - 1;
-                        if (!state.weapons.includes(wpns[id])) {
-                            state.weapons.push(wpns[id]);
-                            document.getElementById('s' + (id + 1)).innerText = icons[id];
-                            msg("Arma Obtida: " + wpns[id]);
-                            obj.visible = false;
-                        }
-                    }
-                    else if (obj.userData.type === 'exit') transitionTo('HUB');
-                    else if (obj.userData.type === 'trapdoor') {
-                        if (state.weapons.length === 3) transitionTo('ARENA');
-                        else msg("O alçapão requer as 3 relíquias!");
-                    }
-                }
-            });
-
-            if (state.currentScene === 'ARENA') attackBoss();
-        }
-
-        function attackBoss() {
-            if (state.currentWpn === -1) return;
-            heads.forEach(h => {
-                const worldPos = new THREE.Vector3(); h.getWorldPosition(worldPos);
-                if (player.mesh.position.distanceTo(worldPos) < 10 && h.userData.hp > 0) {
-                    const w = state.weapons[state.currentWpn];
-                    let hit = false;
-                    if (h.userData.id === 0 && w.includes("Faca")) hit = true;
-                    if (h.userData.id === 1 && w.includes("Pistola")) hit = true;
-                    if (h.userData.id === 2 && w.includes("Cetro")) hit = true;
-                    if (hit) {
-                        h.userData.hp -= 34; h.scale.multiplyScalar(0.8); msg("ACERTO!");
-                        if (h.userData.hp <= 0) h.visible = false;
-                    } else msg("Use outra arma!");
-                }
-            });
-            if (heads.every(h => !h.visible)) { msg("VICTORY!"); setTimeout(() => location.reload(), 5000); }
-        }
-
-        function selectWeapon(i) {
-            if (i < state.weapons.length) {
-                state.currentWpn = i;
-                document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
-            }
-        }
-
-        function update() {
-            if (state.transitioning) return;
-
-            // Movimento
-            if (keys.w) player.pos.z -= player.speed;
-            if (keys.s) player.pos.z += player.speed;
-            if (keys.a) player.pos.x -= player.speed;
-            if (keys.d) player.pos.x += player.speed;
-            player.mesh.position.copy(player.pos);
-
-            // LOGICA DE CÂMERA (FOCO DINÂMICO)
-            let focusObj = null;
-            interactables.forEach(obj => {
-                if (obj.visible && player.mesh.position.distanceTo(obj.position) < 8) focusObj = obj;
-            });
-
-            if (focusObj) {
-                // Mira entre o jogador e o objeto
-                const midPoint = new THREE.Vector3().lerpVectors(player.mesh.position, focusObj.position, 0.5);
-                state.targetCamPos.copy(midPoint).add(new THREE.Vector3(0, 10, 8));
-                state.targetLookAt.copy(midPoint);
-            } else {
-                state.targetCamPos.copy(player.mesh.position).add(new THREE.Vector3(0, 14, 12));
-                state.targetLookAt.copy(player.mesh.position);
-            }
-
-            camera.position.lerp(state.targetCamPos, 0.08);
-            camera.lookAt(state.targetLookAt);
-
-            // Animação Boss
-            if (state.currentScene === 'ARENA' && boss) boss.position.x = Math.sin(Date.now() * 0.002) * 8;
-        }
-
-        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
-
-        loadHub();
+        loadPhase('HUB');
         animate();
-
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                document.getElementById('loading').style.opacity = '0';
-                setTimeout(() => document.getElementById('loading').style.display = 'none', 1000);
-            }, 1000);
-        });
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        setTimeout(() => { document.getElementById('loading').style.opacity = '0'; setTimeout(() => document.getElementById('loading').style.display = 'none', 1000); }, 1500);
     </script>
 </body>
 
