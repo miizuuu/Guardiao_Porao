@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="O Guardião do Porão - Um jogo de puzzle e aventura 2.5D ambientado em um porão misterioso.">
+    <title>O Guardião do Porão</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="bg"></canvas>
+
+        <!-- UI Overlay -->
+        <div id="ui-overlay">
+            <div id="inventory">
+                <div class="slot" id="slot-1" title="Faca Curta"></div>
+                <div class="slot" id="slot-2" title="Pistola Velha"></div>
+                <div class="slot" id="slot-3" title="Cetro Rúnico"></div>
+            </div>
+
+            <div id="dialog-box" class="hidden">
+                <p id="dialog-text"></p>
+            </div>
+
+            <div id="status-bar">
+                <div id="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+                <div id="weapon-name">Mãos Vazias</div>
+            </div>
+        </div>
+
+        <div id="loading-screen">
+            <h1>O Guardião do Porão</h1>
+            <div class="loader"></div>
+            <p>Entrando nas profundezas...</p>
+        </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>
