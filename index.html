@@ -5,8 +5,188 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>O Guardião do Porão</title>
-    <link rel="stylesheet" href="./style.css">
-    <!-- Import Map para Three.js funcionar direto no navegador/GitHub Pages -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;900&display=swap');
+
+        :root {
+            --bg-dark: #050508;
+            --accent-red: #8b0000;
+            --accent-gold: #d4af37;
+            --glass-bg: rgba(10, 10, 15, 0.85);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            overflow: hidden;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlay */
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px;
+        }
+
+        #inventory {
+            display: flex;
+            gap: 15px;
+            pointer-events: all;
+        }
+
+        .slot {
+            width: 60px;
+            height: 60px;
+            background: var(--glass-bg);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: all 0.3s ease;
+        }
+
+        .slot.active {
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+            transform: scale(1.1);
+        }
+
+        #status-bar {
+            width: 300px;
+        }
+
+        #health-bar-container {
+            width: 100%;
+            height: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff4d4d, var(--accent-red));
+            transition: width 0.5s ease;
+        }
+
+        #weapon-display {
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent-gold);
+            font-size: 14px;
+        }
+
+        #dialog-box {
+            position: absolute;
+            bottom: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px 40px;
+            border-radius: 50px;
+            border: 1px solid var(--accent-gold);
+            text-align: center;
+            display: none;
+        }
+
+        #dialog-box.show {
+            display: block;
+            animation: subtitleFade 3s forwards;
+        }
+
+        @keyframes subtitleFade {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, 20px);
+            }
+
+            10%,
+            90% {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -10px);
+            }
+        }
+
+        #controls-hint {
+            font-size: 12px;
+            opacity: 0.5;
+            text-align: right;
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+        }
+
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 1s;
+        }
+
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 3px solid transparent;
+            border-top-color: var(--accent-gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 20px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
     </script>
@@ -15,40 +195,168 @@
 <body>
     <div id="game-container">
         <canvas id="bg"></canvas>
-
         <div id="ui-overlay">
             <div id="inventory">
                 <div class="slot" id="slot-1"></div>
                 <div class="slot" id="slot-2"></div>
                 <div class="slot" id="slot-3"></div>
             </div>
-
-            <div id="dialog-box" class="hidden">
+            <div id="dialog-box">
                 <p id="dialog-text"></p>
             </div>
-
             <div id="status-bar">
                 <div id="health-bar-container">
                     <div id="health-bar"></div>
                 </div>
-                <div id="weapon-display">
-                    <span id="weapon-icon"></span>
-                    <span id="weapon-name">Mãos Vazias</span>
-                </div>
+                <div id="weapon-display"><span id="weapon-name">Mãos Vazias</span></div>
             </div>
-
-            <div id="controls-hint">
-                [WASD] Mover | [1,2,3] Armas | [ESPAÇO] Atacar
-            </div>
+            <div id="controls-hint">[WASD] Mover | [1,2,3] Armas | [ESPAÇO] Atacar</div>
         </div>
-
         <div id="loading-screen">
             <h1>O Guardião do Porão</h1>
             <div class="loader"></div>
             <p>Entrando nas profundezas...</p>
         </div>
     </div>
-    <script type="module" src="./main.js"></script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050508);
+        scene.fog = new THREE.Fog(0x050508, 5, 45);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const player = {
+            mesh: new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide })),
+            inv: [],
+            current: -1,
+            hp: 100
+        };
+        player.mesh.position.y = 1.1;
+        scene.add(player.mesh);
+
+        const torch = new THREE.PointLight(0xffaa22, 20, 15);
+        scene.add(torch);
+        scene.add(new THREE.AmbientLight(0x404040, 0.6));
+
+        // Mundo
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 300), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.z = -100;
+        scene.add(floor);
+
+        // Puzzles
+        const objects = [];
+        let seq = [];
+        for (let i = 0; i < 3; i++) {
+            const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+            l.position.set(-4 + i * 4, 1, -15);
+            l.userData = { id: i, type: 'lever' };
+            scene.add(l);
+            objects.push(l);
+        }
+
+        // Cristais Sala 2
+        for (let i = 0; i < 3; i++) {
+            const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: [0xff0000, 0x00ff00, 0x0000ff][i] }));
+            c.position.set(-3 + i * 3, 1, -40);
+            c.userData = { id: i, type: 'crystal' };
+            scene.add(c);
+            objects.push(c);
+        }
+
+        // Cérbero
+        const boss = new THREE.Group();
+        const bossHeads = [];
+        const hCols = [0xff4444, 0x44ff44, 0x4444ff];
+        for (let i = 0; i < 3; i++) {
+            const h = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshStandardMaterial({ color: hCols[i] }));
+            h.position.set(-1.8 + i * 1.8, 2.5, 4);
+            h.userData = { hp: 100, id: i };
+            boss.add(h);
+            bossHeads.push(h);
+        }
+        boss.add(new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), new THREE.MeshStandardMaterial({ color: 0x220000 })));
+        boss.position.set(0, 1.5, -100);
+        scene.add(boss);
+
+        // Lógica
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === '1') selectW(0);
+            if (e.key === '2') selectW(1);
+            if (e.key === '3') selectW(2);
+            if (e.key === ' ') attack();
+        });
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        function notify(txt) {
+            const b = document.getElementById('dialog-box');
+            document.getElementById('dialog-text').innerText = txt;
+            b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+        }
+
+        function selectW(i) {
+            if (i >= player.inv.length) return;
+            player.current = i;
+            document.getElementById('weapon-name').innerText = player.inv[i];
+            document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
+        }
+
+        function attack() {
+            if (player.current === -1) return;
+            bossHeads.forEach(h => {
+                if (player.mesh.position.distanceTo(boss.position.clone().add(h.position)) < 10 && h.userData.hp > 0) {
+                    const w = player.inv[player.current];
+                    if ((h.userData.id === 0 && w === "FACA") || (h.userData.id === 1 && w === "PISTOLA") || (h.userData.id === 2 && w === "CETRO")) {
+                        h.userData.hp -= 34; h.scale.multiplyScalar(0.8); notify("DANO NA CABEÇA!");
+                        if (h.userData.hp <= 0) h.visible = false;
+                    } else notify("ARMA ERRADA!");
+                }
+            });
+            if (bossHeads.every(h => h.userData.hp <= 0)) { notify("VOCÊ VENCEU O CÉRBERO!"); setTimeout(() => location.reload(), 5000); }
+        }
+
+        function update() {
+            if (keys.w) player.mesh.position.z -= 0.18;
+            if (keys.s) player.mesh.position.z += 0.18;
+            if (keys.a) player.mesh.position.x -= 0.18;
+            if (keys.d) player.mesh.position.x += 0.18;
+            player.mesh.position.x = Math.max(-8, Math.min(8, player.mesh.position.x));
+
+            camera.position.lerp(new THREE.Vector3(player.mesh.position.x, 6, player.mesh.position.z + 10), 0.1);
+            camera.lookAt(player.mesh.position);
+            torch.position.copy(player.mesh.position).add(new THREE.Vector3(0, 1.5, 1));
+            player.mesh.rotation.y = Math.atan2(camera.position.x - player.mesh.position.x, camera.position.z - player.mesh.position.z);
+
+            objects.forEach(obj => {
+                if (player.mesh.position.distanceTo(obj.position) < 1.5) {
+                    if (obj.userData.type === 'lever' && obj.material.color.getHex() === 0xff0000) {
+                        obj.material.color.set(0x00ff00); seq.push(obj.userData.id);
+                        if (seq.length === 3) {
+                            if (JSON.stringify(seq) === "[1,2,0]") { notify("FACA OBTIDA!"); player.inv.push("FACA"); document.getElementById('slot-1').innerText = "🗡️"; selectW(0); }
+                            else { notify("ERROU!"); seq = []; objects.filter(o => o.userData.type === 'lever').forEach(o => o.material.color.set(0xff0000)); }
+                        }
+                    }
+                    if (obj.userData.type === 'crystal' && obj.visible && player.inv.length === 1) {
+                        notify("PISTOLA OBTIDA!"); player.inv.push("PISTOLA"); document.getElementById('slot-2').innerText = "🔫"; obj.visible = false;
+                        player.inv.push("CETRO"); document.getElementById('slot-3').innerText = "🔮"; // Atalho para o teste
+                    }
+                }
+            });
+            if (player.mesh.position.z < -60) boss.position.x = Math.sin(Date.now() * 0.002) * 6;
+        }
+
+        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
+        animate();
+        window.addEventListener('load', () => { setTimeout(() => { document.getElementById('loading-screen').style.opacity = '0'; setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 1000); notify("ESCAPE DO PORÃO!"); }, 1000); });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    </script>
 </body>
 
 </html>
