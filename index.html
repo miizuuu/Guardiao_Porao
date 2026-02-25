@@ -4,13 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O Guardião do Porão - Expansão</title>
+    <title>O Guardião do Porão - Crônicas do Alçapão</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;900&display=swap');
 
         :root {
             --accent: #d4af37;
-            --bg: #0f0f12;
+            --bg: #0a0a0c;
         }
 
         * {
@@ -42,8 +42,6 @@
         /* UI */
         #ui {
             position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
             z-index: 10;
@@ -52,12 +50,6 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-        }
-
-        #top-ui {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
         }
 
         #inventory {
@@ -69,7 +61,7 @@
         .slot {
             width: 60px;
             height: 60px;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.7);
             border: 2px solid #333;
             border-radius: 12px;
             display: flex;
@@ -86,24 +78,24 @@
         }
 
         #mission-log {
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.6);
             padding: 15px;
             border-radius: 10px;
             border-left: 4px solid var(--accent);
             max-width: 250px;
+            pointer-events: all;
         }
 
         #mission-log h3 {
             font-size: 14px;
             text-transform: uppercase;
             color: var(--accent);
-            margin-bottom: 5px;
         }
 
         #mission-log p {
             font-size: 13px;
-            line-height: 1.4;
             opacity: 0.9;
+            margin-top: 5px;
         }
 
         #dialog {
@@ -111,29 +103,32 @@
             bottom: 15%;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85);
-            padding: 12px 30px;
-            border-radius: 30px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 40px;
+            border-radius: 50px;
             border: 1px solid var(--accent);
             text-align: center;
             display: none;
+            z-index: 20;
         }
 
         #dialog.show {
             display: block;
-            animation: fOnOff 3s forwards;
+            animation: fInOut 3s forwards;
         }
 
-        #controls {
+        #fade-overlay {
             position: absolute;
-            bottom: 20px;
-            right: 20px;
-            font-size: 12px;
-            opacity: 0.6;
-            text-align: right;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s;
         }
 
-        @keyframes fOnOff {
+        @keyframes fInOut {
 
             0%,
             100% {
@@ -157,7 +152,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: 1s;
         }
     </style>
     <script
@@ -166,256 +160,282 @@
 
 <body>
     <div id="game-container">
+        <div id="fade-overlay"></div>
         <canvas id="bg"></canvas>
         <div id="ui">
-            <div id="top-ui">
+            <div style="display: flex; justify-content: space-between;">
                 <div id="inventory">
-                    <div class="slot" id="s1" title="Faca"></div>
-                    <div class="slot" id="s2" title="Pistola"></div>
-                    <div class="slot" id="s3" title="Cetro"></div>
+                    <div class="slot" id="s1"></div>
+                    <div class="slot" id="s2"></div>
+                    <div class="slot" id="s3"></div>
                 </div>
                 <div id="mission-log">
-                    <h3>Objetivo</h3>
-                    <p id="goal-text">Explore o hub central e encontre uma forma de abrir as salas laterais.</p>
+                    <h3>Missão Ativa</h3>
+                    <p id="goal-text">Encontre itens no porão para abrir as salas trancadas.</p>
                 </div>
             </div>
             <div id="dialog"></div>
-            <div id="controls">[WASD] Mover | [1-3] Armas | [ESPAÇO] Interagir / Atacar</div>
+            <div style="font-size: 12px; opacity: 0.6; text-align: right;">[WASD] Mover | [ESPAÇO] Interagir / Atacar
+            </div>
         </div>
         <div id="loading">
-            <h1>Gerando Porão...</h1>
+            <h1>Carregando Porão...</h1>
         </div>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
 
-        // --- CENA E LUZ (ILUMINAÇÃO CLARA) ---
+        // --- SETUP INICIAL ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a20);
         const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        const ambLight = new THREE.AmbientLight(0xffffff, 0.8); // Bem claro
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.9);
         scene.add(ambLight);
-        const sun = new THREE.DirectionalLight(0xffffff, 0.5);
-        sun.position.set(5, 10, 5);
-        scene.add(sun);
 
-        // --- ESTADO ---
-        const gameState = {
-            items: [], // 'chave1', 'alavanca', 'codigo'
+        // --- ESTADO GLOBAL ---
+        const state = {
+            currentScene: 'HUB', // 'HUB', 'ROOM1', 'ROOM2', 'ROOM3', 'ARENA'
+            items: [],
             weapons: [],
-            roomsCleared: 0,
-            currentWpn: -1
+            currentWpn: -1,
+            targetCamPos: new THREE.Vector3(0, 15, 15),
+            targetLookAt: new THREE.Vector3(0, 0, 0),
+            transitioning: false
         };
 
         const player = {
-            mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.2), new THREE.MeshStandardMaterial({ color: 0x55aaff })),
+            mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.3), new THREE.MeshStandardMaterial({ color: 0x55ccff })),
+            pos: new THREE.Vector3(0, 1, 0),
             speed: 0.2
         };
-        player.mesh.position.y = 1;
         scene.add(player.mesh);
 
-        // --- MUNDO (HUB CENTRAL) ---
-        function createProps() {
-            // Chão Grande
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x333333 }));
-            floor.rotation.x = -Math.PI / 2;
-            scene.add(floor);
-
-            // Alçapão Central
-            const trapdoor = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            trapdoor.position.set(0, 0.05, 0);
-            trapdoor.name = "trapdoor";
-            scene.add(trapdoor);
-
-            // Objetos espalhados (Crates/Mesas)
-            const boxGeo = new THREE.BoxGeometry(2, 2, 2);
-            for (let i = 0; i < 8; i++) {
-                const box = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: 0x443322 }));
-                box.position.set(Math.sin(i) * 15, 1, Math.cos(i) * 15);
-                scene.add(box);
-            }
-
-            // Itens de Busca
-            createItem(5, 0.5, 5, 'Alavanca de Ferro', 0xff0000);
-            createItem(-10, 0.5, 8, 'Código das Cores', 0x00ff00);
-            createItem(3, 0.5, -12, 'Manopla Rúnica', 0x0000ff);
-        }
-
+        // --- GERENCIADOR DE CENAS ---
         const interactables = [];
-        function createItem(x, y, z, name, col) {
-            const item = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: col, emissive: col }));
-            item.position.set(x, y, z);
-            item.userData = { type: 'pickup', name: name };
-            scene.add(item);
-            interactables.push(item);
+        function clearScene() {
+            const toRemove = [];
+            scene.traverse(child => {
+                if (child.userData.dynamic) toRemove.push(child);
+            });
+            toRemove.forEach(obj => scene.remove(obj));
+            interactables.length = 0;
         }
 
-        // SALAS (Portões)
-        function createGates() {
-            const gateGeo = new THREE.BoxGeometry(4, 5, 0.5);
-            const g1 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            g1.position.set(-20, 2.5, 0); g1.rotation.y = Math.PI / 2;
-            g1.userData = { type: 'gate', id: 1, req: 'Alavanca de Ferro' };
+        async function transitionTo(sceneName) {
+            if (state.transitioning) return;
+            state.transitioning = true;
+            const fade = document.getElementById('fade-overlay');
+            fade.style.opacity = '1';
 
-            const g2 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            g2.position.set(20, 2.5, 0); g2.rotation.y = -Math.PI / 2;
-            g2.userData = { type: 'gate', id: 2, req: 'Código das Cores' };
+            await new Promise(r => setTimeout(r, 800));
 
-            const g3 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
-            g3.position.set(0, 2.5, -20);
-            g3.userData = { type: 'gate', id: 3, req: 'Manopla Rúnica' };
+            clearScene();
+            state.currentScene = sceneName;
 
-            scene.add(g1, g2, g3);
-            interactables.push(g1, g2, g3);
+            if (sceneName === 'HUB') loadHub();
+            else if (sceneName.startsWith('ROOM')) loadRoom(sceneName.replace('ROOM', ''));
+            else if (sceneName === 'ARENA') loadArena();
+
+            fade.style.opacity = '0';
+            state.transitioning = false;
         }
 
-        // --- SISTEMA DE COMBATE (CÉRBERO ABAIXO) ---
+        // --- CENÁRIOS ---
+        function loadHub() {
+            // Chão
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
+
+            // Alçapão
+            const tp = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 5), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            tp.position.set(0, 0, 0); tp.userData = { dynamic: true, type: 'trapdoor' };
+            scene.add(tp); interactables.push(tp);
+
+            // Portas
+            createGate(-15, 0, 'Alavanca', 'ROOM1', 0xaa55ff);
+            createGate(15, 0, 'Código', 'ROOM2', 0x55ffaa);
+            createGate(0, -15, 'Manopla', 'ROOM3', 0xffaa55);
+
+            // Itens
+            createItem(8, 8, 'Alavanca de Ferro', 0xff0000);
+            createItem(-8, 5, 'Código Antigo', 0x00ff00);
+            createItem(4, -10, 'Manopla Rúnica', 0x0000ff);
+
+            player.pos.set(0, 1, 5);
+            updateLog("Hub Central: Encontre os itens espalhados para abrir as salas.");
+        }
+
+        function loadRoom(id) {
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshStandardMaterial({ color: 0x221144 }));
+            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
+
+            const prize = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.4), new THREE.MeshStandardMaterial({ color: 0xd4af37, emissive: 0x554400 }));
+            prize.position.set(0, 2, -5); prize.userData = { dynamic: true, type: 'weapon', id: id };
+            scene.add(prize); interactables.push(prize);
+
+            const exit = new THREE.Mesh(new THREE.BoxGeometry(3, 4, 1), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            exit.position.set(0, 2, 12); exit.userData = { dynamic: true, type: 'exit' };
+            scene.add(exit); interactables.push(exit);
+
+            player.pos.set(0, 1, 10);
+            updateLog(`Sala ${id}: Pegue a relíquia no centro.`);
+        }
+
         let boss;
-        const bossHeads = [];
-        function setupBoss() {
+        const heads = [];
+        function loadArena() {
+            const floor = new THREE.Mesh(new THREE.CircleGeometry(25, 32), new THREE.MeshStandardMaterial({ color: 0x1a0a0a }));
+            floor.rotation.x = -Math.PI / 2; floor.userData.dynamic = true; scene.add(floor);
+
             boss = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 7), new THREE.MeshStandardMaterial({ color: 0x330000 }));
+            boss.userData.dynamic = true;
+            const body = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 8), new THREE.MeshStandardMaterial({ color: 0x440000 }));
             boss.add(body);
+            const colors = [0xff0000, 0x00ff00, 0x0000ff];
             for (let i = 0; i < 3; i++) {
-                const h = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshStandardMaterial({ color: [0xff0000, 0x00ff00, 0x0000ff][i] }));
-                h.position.set(-2 + i * 2, 2.5, 4);
+                const h = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshStandardMaterial({ color: colors[i] }));
+                h.position.set(-2.5 + i * 2.5, 3.5, 4.5);
                 h.userData = { hp: 100, id: i };
-                boss.add(h);
-                bossHeads.push(h);
+                boss.add(h); heads.push(h);
             }
-            boss.position.set(0, -10, 0); // Fica embaixo do chão
+            boss.position.set(0, 2, -10);
             scene.add(boss);
+
+            player.pos.set(0, 1, 15);
+            updateLog("Arena Final: Use 1, 2, 3 para trocar de arma e ESPAÇO para atacar!");
         }
 
-        // --- LÓGICA DE JOGO ---
+        // --- HELPERS ---
+        function createGate(x, z, req, target, col) {
+            const g = new THREE.Mesh(new THREE.BoxGeometry(4, 6, 1), new THREE.MeshStandardMaterial({ color: col, transparent: true, opacity: 0.8 }));
+            g.position.set(x, 3, z);
+            if (x !== 0) g.rotation.y = Math.PI / 2;
+            g.userData = { dynamic: true, type: 'gate', req: req, target: target };
+            scene.add(g); interactables.push(g);
+        }
+
+        function createItem(x, z, name, col) {
+            const i = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: col, emissive: col }));
+            i.position.set(x, 1, z);
+            i.userData = { dynamic: true, type: 'item', name: name };
+            scene.add(i); interactables.push(i);
+        }
+
         function msg(t) {
             const d = document.getElementById('dialog');
             d.innerText = t; d.classList.remove('show'); void d.offsetWidth; d.classList.add('show');
         }
 
-        function collect(name) {
-            gameState.items.push(name);
-            msg("Você pegou: " + name);
-            updateLog();
-        }
+        function updateLog(t) { document.getElementById('goal-text').innerText = t; }
 
-        function updateLog() {
-            const log = document.getElementById('goal-text');
-            if (gameState.weapons.length < 3) {
-                log.innerText = `Você tem ${gameState.weapons.length}/3 armas. Explore as salas laterais usando os itens encontrados no hub.`;
-            } else {
-                log.innerText = "O ALÇAPÃO ESTÁ SE ABRINDO! Vá para o centro do porão!";
-                scene.getObjectByName('trapdoor').position.y = -5; // Abre o alçapão
-            }
-        }
-
-        function tryEnter(id, req) {
-            if (gameState.items.includes(req)) {
-                msg("Acesso à Sala " + id + " liberado!");
-                // Simula ganho da arma ao "entrar" (para protótipo rápido)
-                const wpns = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
-                const icons = ["🗡️", "🔫", "🔮"];
-                if (!gameState.weapons.includes(wpns[id - 1])) {
-                    gameState.weapons.push(wpns[id - 1]);
-                    document.getElementById('s' + id).innerText = icons[id - 1];
-                    msg("Você superou os desafios e obteve: " + wpns[id - 1]);
-                    updateLog();
-                }
-            } else {
-                msg("Esta sala requer: " + req);
-            }
-        }
-
+        // --- SISTEMA DE CÂMERA E MOVIMENTO ---
         const keys = {};
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
-            if (e.key === ' ') checkInteraction();
+            if (e.key === ' ') interact();
             if (['1', '2', '3'].includes(e.key)) selectWeapon(parseInt(e.key) - 1);
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        function selectWeapon(i) {
-            if (i < gameState.weapons.length) {
-                gameState.currentWpn = i;
-                document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
-                msg("Equipado: " + gameState.weapons[i]);
-            }
-        }
-
-        function checkInteraction() {
-            // Se estiver no alçapão e aberto, ataca o boss
-            if (player.mesh.position.y < -2) {
-                attackBoss();
-                return;
-            }
-
+        function interact() {
             interactables.forEach(obj => {
-                if (player.mesh.position.distanceTo(obj.position) < 2.5) {
-                    if (obj.userData.type === 'pickup') {
-                        collect(obj.userData.name);
+                if (player.mesh.position.distanceTo(obj.position) < 4) {
+                    if (obj.userData.type === 'item') {
+                        state.items.push(obj.userData.name.split(' ')[0]); // Pega só a primeira palavra
+                        msg("Coletado: " + obj.userData.name);
                         obj.visible = false;
-                        obj.position.y = -10;
-                    } else if (obj.userData.type === 'gate') {
-                        tryEnter(obj.userData.id, obj.userData.req);
+                    }
+                    else if (obj.userData.type === 'gate') {
+                        if (state.items.includes(obj.userData.req)) transitionTo(obj.userData.target);
+                        else msg("Bloqueado! Precisa de: " + obj.userData.req);
+                    }
+                    else if (obj.userData.type === 'weapon') {
+                        const wpns = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
+                        const icons = ["🗡️", "🔫", "🔮"];
+                        const id = parseInt(obj.userData.id) - 1;
+                        if (!state.weapons.includes(wpns[id])) {
+                            state.weapons.push(wpns[id]);
+                            document.getElementById('s' + (id + 1)).innerText = icons[id];
+                            msg("Arma Obtida: " + wpns[id]);
+                            obj.visible = false;
+                        }
+                    }
+                    else if (obj.userData.type === 'exit') transitionTo('HUB');
+                    else if (obj.userData.type === 'trapdoor') {
+                        if (state.weapons.length === 3) transitionTo('ARENA');
+                        else msg("O alçapão requer as 3 relíquias!");
                     }
                 }
             });
+
+            if (state.currentScene === 'ARENA') attackBoss();
         }
 
         function attackBoss() {
-            if (gameState.currentWpn === -1) return;
-            bossHeads.forEach(h => {
-                if (player.mesh.position.distanceTo(boss.position.clone().add(h.position)) < 8) {
-                    const w = gameState.weapons[gameState.currentWpn];
+            if (state.currentWpn === -1) return;
+            heads.forEach(h => {
+                const worldPos = new THREE.Vector3(); h.getWorldPosition(worldPos);
+                if (player.mesh.position.distanceTo(worldPos) < 10 && h.userData.hp > 0) {
+                    const w = state.weapons[state.currentWpn];
                     let hit = false;
-                    if (h.userData.id === 0 && w === "Faca Curta") hit = true;
-                    if (h.userData.id === 1 && w === "Pistola Velha") hit = true;
-                    if (h.userData.id === 2 && w === "Cetro Rúnico") hit = true;
-
+                    if (h.userData.id === 0 && w.includes("Faca")) hit = true;
+                    if (h.userData.id === 1 && w.includes("Pistola")) hit = true;
+                    if (h.userData.id === 2 && w.includes("Cetro")) hit = true;
                     if (hit) {
-                        h.userData.hp -= 34; h.scale.multiplyScalar(0.85); msg("DANO DIRETO!");
+                        h.userData.hp -= 34; h.scale.multiplyScalar(0.8); msg("ACERTO!");
                         if (h.userData.hp <= 0) h.visible = false;
-                    } else msg("Essa arma não surte efeito nesta cabeça!");
+                    } else msg("Use outra arma!");
                 }
             });
-            if (bossHeads.every(h => !h.visible)) {
-                msg("O GUARDIÃO FOI DERROTADO! VOCÊ ESTÁ LIVRE!");
-                setTimeout(() => location.reload(), 6000);
+            if (heads.every(h => !h.visible)) { msg("VICTORY!"); setTimeout(() => location.reload(), 5000); }
+        }
+
+        function selectWeapon(i) {
+            if (i < state.weapons.length) {
+                state.currentWpn = i;
+                document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
             }
         }
 
         function update() {
-            const move = new THREE.Vector3(0, 0, 0);
-            if (keys.w) move.z -= player.speed;
-            if (keys.s) move.z += player.speed;
-            if (keys.a) move.x -= player.speed;
-            if (keys.d) move.x += player.speed;
+            if (state.transitioning) return;
 
-            player.mesh.position.add(move);
+            // Movimento
+            if (keys.w) player.pos.z -= player.speed;
+            if (keys.s) player.pos.z += player.speed;
+            if (keys.a) player.pos.x -= player.speed;
+            if (keys.d) player.pos.x += player.speed;
+            player.mesh.position.copy(player.pos);
 
-            // Se cair no alçapão aberta
-            if (Math.abs(player.mesh.position.x) < 3 && Math.abs(player.mesh.position.z) < 3 && gameState.weapons.length === 3) {
-                if (player.mesh.position.y > -8) player.mesh.position.y -= 0.1;
+            // LOGICA DE CÂMERA (FOCO DINÂMICO)
+            let focusObj = null;
+            interactables.forEach(obj => {
+                if (obj.visible && player.mesh.position.distanceTo(obj.position) < 8) focusObj = obj;
+            });
+
+            if (focusObj) {
+                // Mira entre o jogador e o objeto
+                const midPoint = new THREE.Vector3().lerpVectors(player.mesh.position, focusObj.position, 0.5);
+                state.targetCamPos.copy(midPoint).add(new THREE.Vector3(0, 10, 8));
+                state.targetLookAt.copy(midPoint);
+            } else {
+                state.targetCamPos.copy(player.mesh.position).add(new THREE.Vector3(0, 14, 12));
+                state.targetLookAt.copy(player.mesh.position);
             }
 
-            // Câmera dinâmica
-            camera.position.lerp(new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + 12, player.mesh.position.z + 12), 0.1);
-            camera.lookAt(player.mesh.position);
+            camera.position.lerp(state.targetCamPos, 0.08);
+            camera.lookAt(state.targetLookAt);
+
+            // Animação Boss
+            if (state.currentScene === 'ARENA' && boss) boss.position.x = Math.sin(Date.now() * 0.002) * 8;
         }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            update();
-            renderer.render(scene, camera);
-        }
+        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
 
-        createProps();
-        createGates();
-        setupBoss();
+        loadHub();
         animate();
 
         window.addEventListener('load', () => {
