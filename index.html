@@ -4,15 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O Guardião do Porão</title>
+    <title>O Guardião do Porão - Expansão</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;900&display=swap');
 
         :root {
-            --bg-dark: #050508;
-            --accent-red: #8b0000;
-            --accent-gold: #d4af37;
-            --glass-bg: rgba(10, 10, 15, 0.85);
+            --accent: #d4af37;
+            --bg: #0f0f12;
         }
 
         * {
@@ -23,7 +21,7 @@
         }
 
         body {
-            background-color: var(--bg-dark);
+            background-color: var(--bg);
             overflow: hidden;
             color: white;
         }
@@ -36,15 +34,13 @@
 
         #bg {
             position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
             width: 100%;
             height: 100%;
+            z-index: 1;
         }
 
-        /* UI Overlay */
-        #ui-overlay {
+        /* UI */
+        #ui {
             position: absolute;
             top: 0;
             left: 0;
@@ -52,85 +48,95 @@
             height: 100%;
             z-index: 10;
             pointer-events: none;
+            padding: 30px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 30px;
+        }
+
+        #top-ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
         }
 
         #inventory {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             pointer-events: all;
         }
 
         .slot {
             width: 60px;
             height: 60px;
-            background: var(--glass-bg);
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #333;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
-            transition: all 0.3s ease;
+            font-size: 24px;
+            transition: 0.3s;
         }
 
         .slot.active {
-            border-color: var(--accent-gold);
-            box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
             transform: scale(1.1);
         }
 
-        #status-bar {
-            width: 300px;
+        #mission-log {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid var(--accent);
+            max-width: 250px;
         }
 
-        #health-bar-container {
-            width: 100%;
-            height: 10px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 5px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-
-        #health-bar {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, #ff4d4d, var(--accent-red));
-            transition: width 0.5s ease;
-        }
-
-        #weapon-display {
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: var(--accent-gold);
+        #mission-log h3 {
             font-size: 14px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 5px;
         }
 
-        #dialog-box {
+        #mission-log p {
+            font-size: 13px;
+            line-height: 1.4;
+            opacity: 0.9;
+        }
+
+        #dialog {
             position: absolute;
             bottom: 15%;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.85);
-            padding: 15px 40px;
-            border-radius: 50px;
-            border: 1px solid var(--accent-gold);
+            padding: 12px 30px;
+            border-radius: 30px;
+            border: 1px solid var(--accent);
             text-align: center;
             display: none;
         }
 
-        #dialog-box.show {
+        #dialog.show {
             display: block;
-            animation: subtitleFade 3s forwards;
+            animation: fOnOff 3s forwards;
         }
 
-        @keyframes subtitleFade {
-            0% {
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 12px;
+            opacity: 0.6;
+            text-align: right;
+        }
+
+        @keyframes fOnOff {
+
+            0%,
+            100% {
                 opacity: 0;
                 transform: translate(-50%, 20px);
             }
@@ -140,222 +146,289 @@
                 opacity: 1;
                 transform: translate(-50%, 0);
             }
-
-            100% {
-                opacity: 0;
-                transform: translate(-50%, -10px);
-            }
         }
 
-        #controls-hint {
-            font-size: 12px;
-            opacity: 0.5;
-            text-align: right;
+        #loading {
             position: absolute;
-            bottom: 30px;
-            right: 30px;
-        }
-
-        #loading-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-dark);
+            background: #000;
             z-index: 100;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 1s;
-        }
-
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 3px solid transparent;
-            border-top-color: var(--accent-gold);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-top: 20px;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+            transition: 1s;
         }
     </style>
-    <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-    </script>
+    <script
+        type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } } </script>
 </head>
 
 <body>
     <div id="game-container">
         <canvas id="bg"></canvas>
-        <div id="ui-overlay">
-            <div id="inventory">
-                <div class="slot" id="slot-1"></div>
-                <div class="slot" id="slot-2"></div>
-                <div class="slot" id="slot-3"></div>
-            </div>
-            <div id="dialog-box">
-                <p id="dialog-text"></p>
-            </div>
-            <div id="status-bar">
-                <div id="health-bar-container">
-                    <div id="health-bar"></div>
+        <div id="ui">
+            <div id="top-ui">
+                <div id="inventory">
+                    <div class="slot" id="s1" title="Faca"></div>
+                    <div class="slot" id="s2" title="Pistola"></div>
+                    <div class="slot" id="s3" title="Cetro"></div>
                 </div>
-                <div id="weapon-display"><span id="weapon-name">Mãos Vazias</span></div>
+                <div id="mission-log">
+                    <h3>Objetivo</h3>
+                    <p id="goal-text">Explore o hub central e encontre uma forma de abrir as salas laterais.</p>
+                </div>
             </div>
-            <div id="controls-hint">[WASD] Mover | [1,2,3] Armas | [ESPAÇO] Atacar</div>
+            <div id="dialog"></div>
+            <div id="controls">[WASD] Mover | [1-3] Armas | [ESPAÇO] Interagir / Atacar</div>
         </div>
-        <div id="loading-screen">
-            <h1>O Guardião do Porão</h1>
-            <div class="loader"></div>
-            <p>Entrando nas profundezas...</p>
+        <div id="loading">
+            <h1>Gerando Porão...</h1>
         </div>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
 
+        // --- CENA E LUZ (ILUMINAÇÃO CLARA) ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050508);
-        scene.fog = new THREE.Fog(0x050508, 5, 45);
-
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        scene.background = new THREE.Color(0x1a1a20);
+        const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        const player = {
-            mesh: new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide })),
-            inv: [],
-            current: -1,
-            hp: 100
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.8); // Bem claro
+        scene.add(ambLight);
+        const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+        sun.position.set(5, 10, 5);
+        scene.add(sun);
+
+        // --- ESTADO ---
+        const gameState = {
+            items: [], // 'chave1', 'alavanca', 'codigo'
+            weapons: [],
+            roomsCleared: 0,
+            currentWpn: -1
         };
-        player.mesh.position.y = 1.1;
+
+        const player = {
+            mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.2), new THREE.MeshStandardMaterial({ color: 0x55aaff })),
+            speed: 0.2
+        };
+        player.mesh.position.y = 1;
         scene.add(player.mesh);
 
-        const torch = new THREE.PointLight(0xffaa22, 20, 15);
-        scene.add(torch);
-        scene.add(new THREE.AmbientLight(0x404040, 0.6));
+        // --- MUNDO (HUB CENTRAL) ---
+        function createProps() {
+            // Chão Grande
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
 
-        // Mundo
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 300), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.z = -100;
-        scene.add(floor);
+            // Alçapão Central
+            const trapdoor = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+            trapdoor.position.set(0, 0.05, 0);
+            trapdoor.name = "trapdoor";
+            scene.add(trapdoor);
 
-        // Puzzles
-        const objects = [];
-        let seq = [];
-        for (let i = 0; i < 3; i++) {
-            const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-            l.position.set(-4 + i * 4, 1, -15);
-            l.userData = { id: i, type: 'lever' };
-            scene.add(l);
-            objects.push(l);
+            // Objetos espalhados (Crates/Mesas)
+            const boxGeo = new THREE.BoxGeometry(2, 2, 2);
+            for (let i = 0; i < 8; i++) {
+                const box = new THREE.Mesh(boxGeo, new THREE.MeshStandardMaterial({ color: 0x443322 }));
+                box.position.set(Math.sin(i) * 15, 1, Math.cos(i) * 15);
+                scene.add(box);
+            }
+
+            // Itens de Busca
+            createItem(5, 0.5, 5, 'Alavanca de Ferro', 0xff0000);
+            createItem(-10, 0.5, 8, 'Código das Cores', 0x00ff00);
+            createItem(3, 0.5, -12, 'Manopla Rúnica', 0x0000ff);
         }
 
-        // Cristais Sala 2
-        for (let i = 0; i < 3; i++) {
-            const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: [0xff0000, 0x00ff00, 0x0000ff][i] }));
-            c.position.set(-3 + i * 3, 1, -40);
-            c.userData = { id: i, type: 'crystal' };
-            scene.add(c);
-            objects.push(c);
+        const interactables = [];
+        function createItem(x, y, z, name, col) {
+            const item = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: col, emissive: col }));
+            item.position.set(x, y, z);
+            item.userData = { type: 'pickup', name: name };
+            scene.add(item);
+            interactables.push(item);
         }
 
-        // Cérbero
-        const boss = new THREE.Group();
+        // SALAS (Portões)
+        function createGates() {
+            const gateGeo = new THREE.BoxGeometry(4, 5, 0.5);
+            const g1 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            g1.position.set(-20, 2.5, 0); g1.rotation.y = Math.PI / 2;
+            g1.userData = { type: 'gate', id: 1, req: 'Alavanca de Ferro' };
+
+            const g2 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            g2.position.set(20, 2.5, 0); g2.rotation.y = -Math.PI / 2;
+            g2.userData = { type: 'gate', id: 2, req: 'Código das Cores' };
+
+            const g3 = new THREE.Mesh(gateGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            g3.position.set(0, 2.5, -20);
+            g3.userData = { type: 'gate', id: 3, req: 'Manopla Rúnica' };
+
+            scene.add(g1, g2, g3);
+            interactables.push(g1, g2, g3);
+        }
+
+        // --- SISTEMA DE COMBATE (CÉRBERO ABAIXO) ---
+        let boss;
         const bossHeads = [];
-        const hCols = [0xff4444, 0x44ff44, 0x4444ff];
-        for (let i = 0; i < 3; i++) {
-            const h = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshStandardMaterial({ color: hCols[i] }));
-            h.position.set(-1.8 + i * 1.8, 2.5, 4);
-            h.userData = { hp: 100, id: i };
-            boss.add(h);
-            bossHeads.push(h);
+        function setupBoss() {
+            boss = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 7), new THREE.MeshStandardMaterial({ color: 0x330000 }));
+            boss.add(body);
+            for (let i = 0; i < 3; i++) {
+                const h = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshStandardMaterial({ color: [0xff0000, 0x00ff00, 0x0000ff][i] }));
+                h.position.set(-2 + i * 2, 2.5, 4);
+                h.userData = { hp: 100, id: i };
+                boss.add(h);
+                bossHeads.push(h);
+            }
+            boss.position.set(0, -10, 0); // Fica embaixo do chão
+            scene.add(boss);
         }
-        boss.add(new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), new THREE.MeshStandardMaterial({ color: 0x220000 })));
-        boss.position.set(0, 1.5, -100);
-        scene.add(boss);
 
-        // Lógica
+        // --- LÓGICA DE JOGO ---
+        function msg(t) {
+            const d = document.getElementById('dialog');
+            d.innerText = t; d.classList.remove('show'); void d.offsetWidth; d.classList.add('show');
+        }
+
+        function collect(name) {
+            gameState.items.push(name);
+            msg("Você pegou: " + name);
+            updateLog();
+        }
+
+        function updateLog() {
+            const log = document.getElementById('goal-text');
+            if (gameState.weapons.length < 3) {
+                log.innerText = `Você tem ${gameState.weapons.length}/3 armas. Explore as salas laterais usando os itens encontrados no hub.`;
+            } else {
+                log.innerText = "O ALÇAPÃO ESTÁ SE ABRINDO! Vá para o centro do porão!";
+                scene.getObjectByName('trapdoor').position.y = -5; // Abre o alçapão
+            }
+        }
+
+        function tryEnter(id, req) {
+            if (gameState.items.includes(req)) {
+                msg("Acesso à Sala " + id + " liberado!");
+                // Simula ganho da arma ao "entrar" (para protótipo rápido)
+                const wpns = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
+                const icons = ["🗡️", "🔫", "🔮"];
+                if (!gameState.weapons.includes(wpns[id - 1])) {
+                    gameState.weapons.push(wpns[id - 1]);
+                    document.getElementById('s' + id).innerText = icons[id - 1];
+                    msg("Você superou os desafios e obteve: " + wpns[id - 1]);
+                    updateLog();
+                }
+            } else {
+                msg("Esta sala requer: " + req);
+            }
+        }
+
         const keys = {};
         window.addEventListener('keydown', e => {
             keys[e.key.toLowerCase()] = true;
-            if (e.key === '1') selectW(0);
-            if (e.key === '2') selectW(1);
-            if (e.key === '3') selectW(2);
-            if (e.key === ' ') attack();
+            if (e.key === ' ') checkInteraction();
+            if (['1', '2', '3'].includes(e.key)) selectWeapon(parseInt(e.key) - 1);
         });
         window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-        function notify(txt) {
-            const b = document.getElementById('dialog-box');
-            document.getElementById('dialog-text').innerText = txt;
-            b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+        function selectWeapon(i) {
+            if (i < gameState.weapons.length) {
+                gameState.currentWpn = i;
+                document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
+                msg("Equipado: " + gameState.weapons[i]);
+            }
         }
 
-        function selectW(i) {
-            if (i >= player.inv.length) return;
-            player.current = i;
-            document.getElementById('weapon-name').innerText = player.inv[i];
-            document.querySelectorAll('.slot').forEach((s, idx) => s.classList.toggle('active', idx === i));
-        }
+        function checkInteraction() {
+            // Se estiver no alçapão e aberto, ataca o boss
+            if (player.mesh.position.y < -2) {
+                attackBoss();
+                return;
+            }
 
-        function attack() {
-            if (player.current === -1) return;
-            bossHeads.forEach(h => {
-                if (player.mesh.position.distanceTo(boss.position.clone().add(h.position)) < 10 && h.userData.hp > 0) {
-                    const w = player.inv[player.current];
-                    if ((h.userData.id === 0 && w === "FACA") || (h.userData.id === 1 && w === "PISTOLA") || (h.userData.id === 2 && w === "CETRO")) {
-                        h.userData.hp -= 34; h.scale.multiplyScalar(0.8); notify("DANO NA CABEÇA!");
-                        if (h.userData.hp <= 0) h.visible = false;
-                    } else notify("ARMA ERRADA!");
+            interactables.forEach(obj => {
+                if (player.mesh.position.distanceTo(obj.position) < 2.5) {
+                    if (obj.userData.type === 'pickup') {
+                        collect(obj.userData.name);
+                        obj.visible = false;
+                        obj.position.y = -10;
+                    } else if (obj.userData.type === 'gate') {
+                        tryEnter(obj.userData.id, obj.userData.req);
+                    }
                 }
             });
-            if (bossHeads.every(h => h.userData.hp <= 0)) { notify("VOCÊ VENCEU O CÉRBERO!"); setTimeout(() => location.reload(), 5000); }
+        }
+
+        function attackBoss() {
+            if (gameState.currentWpn === -1) return;
+            bossHeads.forEach(h => {
+                if (player.mesh.position.distanceTo(boss.position.clone().add(h.position)) < 8) {
+                    const w = gameState.weapons[gameState.currentWpn];
+                    let hit = false;
+                    if (h.userData.id === 0 && w === "Faca Curta") hit = true;
+                    if (h.userData.id === 1 && w === "Pistola Velha") hit = true;
+                    if (h.userData.id === 2 && w === "Cetro Rúnico") hit = true;
+
+                    if (hit) {
+                        h.userData.hp -= 34; h.scale.multiplyScalar(0.85); msg("DANO DIRETO!");
+                        if (h.userData.hp <= 0) h.visible = false;
+                    } else msg("Essa arma não surte efeito nesta cabeça!");
+                }
+            });
+            if (bossHeads.every(h => !h.visible)) {
+                msg("O GUARDIÃO FOI DERROTADO! VOCÊ ESTÁ LIVRE!");
+                setTimeout(() => location.reload(), 6000);
+            }
         }
 
         function update() {
-            if (keys.w) player.mesh.position.z -= 0.18;
-            if (keys.s) player.mesh.position.z += 0.18;
-            if (keys.a) player.mesh.position.x -= 0.18;
-            if (keys.d) player.mesh.position.x += 0.18;
-            player.mesh.position.x = Math.max(-8, Math.min(8, player.mesh.position.x));
+            const move = new THREE.Vector3(0, 0, 0);
+            if (keys.w) move.z -= player.speed;
+            if (keys.s) move.z += player.speed;
+            if (keys.a) move.x -= player.speed;
+            if (keys.d) move.x += player.speed;
 
-            camera.position.lerp(new THREE.Vector3(player.mesh.position.x, 6, player.mesh.position.z + 10), 0.1);
+            player.mesh.position.add(move);
+
+            // Se cair no alçapão aberta
+            if (Math.abs(player.mesh.position.x) < 3 && Math.abs(player.mesh.position.z) < 3 && gameState.weapons.length === 3) {
+                if (player.mesh.position.y > -8) player.mesh.position.y -= 0.1;
+            }
+
+            // Câmera dinâmica
+            camera.position.lerp(new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + 12, player.mesh.position.z + 12), 0.1);
             camera.lookAt(player.mesh.position);
-            torch.position.copy(player.mesh.position).add(new THREE.Vector3(0, 1.5, 1));
-            player.mesh.rotation.y = Math.atan2(camera.position.x - player.mesh.position.x, camera.position.z - player.mesh.position.z);
-
-            objects.forEach(obj => {
-                if (player.mesh.position.distanceTo(obj.position) < 1.5) {
-                    if (obj.userData.type === 'lever' && obj.material.color.getHex() === 0xff0000) {
-                        obj.material.color.set(0x00ff00); seq.push(obj.userData.id);
-                        if (seq.length === 3) {
-                            if (JSON.stringify(seq) === "[1,2,0]") { notify("FACA OBTIDA!"); player.inv.push("FACA"); document.getElementById('slot-1').innerText = "🗡️"; selectW(0); }
-                            else { notify("ERROU!"); seq = []; objects.filter(o => o.userData.type === 'lever').forEach(o => o.material.color.set(0xff0000)); }
-                        }
-                    }
-                    if (obj.userData.type === 'crystal' && obj.visible && player.inv.length === 1) {
-                        notify("PISTOLA OBTIDA!"); player.inv.push("PISTOLA"); document.getElementById('slot-2').innerText = "🔫"; obj.visible = false;
-                        player.inv.push("CETRO"); document.getElementById('slot-3').innerText = "🔮"; // Atalho para o teste
-                    }
-                }
-            });
-            if (player.mesh.position.z < -60) boss.position.x = Math.sin(Date.now() * 0.002) * 6;
         }
 
-        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
+        function animate() {
+            requestAnimationFrame(animate);
+            update();
+            renderer.render(scene, camera);
+        }
+
+        createProps();
+        createGates();
+        setupBoss();
         animate();
-        window.addEventListener('load', () => { setTimeout(() => { document.getElementById('loading-screen').style.opacity = '0'; setTimeout(() => document.getElementById('loading-screen').style.display = 'none', 1000); notify("ESCAPE DO PORÃO!"); }, 1000); });
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loading').style.opacity = '0';
+                setTimeout(() => document.getElementById('loading').style.display = 'none', 1000);
+            }, 1000);
+        });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 
