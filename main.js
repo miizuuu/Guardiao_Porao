@@ -10,11 +10,24 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg')
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Texturas
+// Texturas com Fallback
 const textureLoader = new THREE.TextureLoader();
-const floorTexture = textureLoader.load('./assets/floor.png');
-const wallTexture = textureLoader.load('./assets/wall.png');
-const heroTexture = textureLoader.load('./assets/hero.png');
+const assetsPath = './public/assets/';
+
+function loadTexture(name, color) {
+    return textureLoader.load(
+        assetsPath + name,
+        undefined, // onLoad
+        undefined, // onProgress
+        function (err) {
+            console.warn(`Erro ao carregar textura ${name}, usando cor fallback.`);
+        }
+    );
+}
+
+const floorTexture = loadTexture('floor.png');
+const wallTexture = loadTexture('wall.png');
+const heroTexture = loadTexture('hero.png');
 
 floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
 floorTexture.repeat.set(10, 10);
@@ -47,6 +60,7 @@ function createBasement() {
     const floorGeo = new THREE.PlaneGeometry(50, 50);
     const floorMat = new THREE.MeshStandardMaterial({
         map: floorTexture,
+        color: 0x222222, // Fallback color
         roughness: 0.8,
         metalness: 0.2
     });
@@ -58,6 +72,7 @@ function createBasement() {
     // Paredes da Sala 1
     const wallMat = new THREE.MeshStandardMaterial({
         map: wallTexture,
+        color: 0x444444, // Fallback color
         roughness: 0.9
     });
 
