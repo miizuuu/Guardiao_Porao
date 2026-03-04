@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="O Guardião do Porão - Aventura Épica 2.5D">
-    <title>O Guardião do Porão</title>
+    <title>O Guardião do Porão - Edição Definitiva</title>
     <link rel="stylesheet" href="./style.css">
     <script type="importmap">
         {
@@ -20,37 +19,34 @@
     <div id="game-container">
         <canvas id="bg"></canvas>
 
-        <!-- UI Overlay -->
-        <div id="ui-overlay">
-            <div id="inventory">
-                <div class="slot" id="slot-1" title="Faca Curta"></div>
-                <div class="slot" id="slot-2" title="Pistola Velha"></div>
-                <div class="slot" id="slot-3" title="Cetro Rúnico"></div>
-            </div>
-
-            <div id="dialog-box" class="hidden">
-                <p id="dialog-text"></p>
-                <button id="close-dialog">Entendido</button>
-            </div>
-
-            <div id="status-bar">
-                <div id="health-bar-container">
-                    <div id="health-bar"></div>
+        <div id="ui-layer">
+            <div id="top-bar">
+                <div id="inventory-slots">
+                    <div class="slot" id="slot-1" data-label="🗡️"></div>
+                    <div class="slot" id="slot-2" data-label="🔫"></div>
+                    <div class="slot" id="slot-3" data-label="🔮"></div>
                 </div>
-                <div id="weapon-info">
-                    <div id="weapon-name">Mãos Vazias</div>
-                </div>
+                <div id="weapon-display">MÃOS VAZIAS</div>
             </div>
 
-            <div id="interaction-prompt" class="hidden">Pressione [E] para interagir</div>
+            <div id="interaction-label" class="hidden">PRESSIONE [E]</div>
+
+            <div id="msg-box" class="hidden">
+                <p id="msg-text"></p>
+                <small>Clique para fechar</small>
+            </div>
+
+            <div id="health-hud">
+                <div id="hp-bar-fill"></div>
+            </div>
         </div>
 
-        <div id="loading-screen">
-            <h1>O Guardião</h1>
-            <div class="loader-container">
-                <div class="loader-bar"></div>
+        <div id="loader">
+            <h1>O GUARDIÃO</h1>
+            <div class="progress">
+                <div id="progress-fill"></div>
             </div>
-            <p style="margin-top: 20px; letter-spacing: 2px;">CARREGANDO AS PROFUNDEZAS...</p>
+            <p>CONSTRUINDO O MUNDO...</p>
         </div>
     </div>
     <script type="module" src="./main.js"></script>
