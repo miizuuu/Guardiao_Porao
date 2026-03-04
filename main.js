@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 
 /**
- * O GUARDIÃO DO PORÃO - VERSÃO DEFINITIVA
- * ---------------------------------------
- * [ARQUITETURA] Hub Central com vãos reais nas paredes.
- * [PERSONAGEM] Sprite animado (4x1) com recorte de transparência agressivo.
- * [COLISÃO] Sistema Box3 por-eixo para deslize lateral.
- * [CÂMERA] Perseguição suave sem atravessar paredes.
+ * O GUARDIÃO DO PORÃO - VERSÃO ESTÁVEL E CORRIGIDA
+ * -----------------------------------------------
+ * [FIX] Resolvido erro de variável indefinida que impedia o boot.
+ * [FIX] Unificados IDs de UI (msg-box).
+ * [FEAT] Hub Central, Buracos nas Paredes, Colisão Deslizante.
  */
 
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050510);
-scene.fog = new THREE.Fog(0x050510, 10, 60);
+scene.fog = new THREE.Fog(0x050510, 10, 65);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), antialias: true, alpha: true });
@@ -20,15 +19,14 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 
-// --- ILUMINAÇÃO (PEAK) ---
-const amb = new THREE.AmbientLight(0xffffff, 0.8);
-scene.add(amb);
-const sun = new THREE.PointLight(0xffaa22, 25, 50);
-sun.position.set(0, 10, 0);
-sun.castShadow = true;
-scene.add(sun);
+// --- ILUMINAÇÃO ---
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const light = new THREE.PointLight(0xffae22, 25, 60);
+light.position.set(0, 10, 0);
+light.castShadow = true;
+scene.add(light);
 
-// --- ASSETS & MATERIAIS ---
+// --- ASSETS ---
 const texLoader = new THREE.TextureLoader();
 const assets = './public/assets/';
 
@@ -50,119 +48,96 @@ heroTex.repeat.set(0.25, 1);
 const matHero = new THREE.MeshStandardMaterial({
     map: heroTex,
     transparent: true,
-    alphaTest: 0.5, // RECORTA O FUNDO DO PNG
+    alphaTest: 0.5,
     side: THREE.FrontSide,
     emissive: 0xffffff,
     emissiveIntensity: 0.1
 });
 
-// --- ESTADO DO JOGO ---
+// --- ESTADO ---
 const game = {
-    player: { mesh: null, box: new THREE.Box3(), speed: 0.2, frame: 0, timer: 0, dir: 1, action: 'idle' },
-    walls: [], // Array de Box3
-    doors: {}, // Objetos de porta
+    player: { mesh: null, box: new THREE.Box3(), speed: 0.18, frame: 0, timer: 0, dir: 1, action: 'idle' },
+    walls: [],
+    doors: {},
     interactables: [],
     leverSeq: [], symbolSeq: [], orbSeq: [],
     input: { w: false, a: false, s: false, d: false, e: false }
 };
 
-// --- FERRAMENTAS DE CONSTRUÇÃO ---
+// --- CONSTRUTORES ---
 
-function addBox(w, h, d, x, y, z, mat, collidable = true) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    mesh.position.set(x, y, z);
-    scene.add(mesh);
-    if (collidable) {
-        game.walls.push(new THREE.Box3().setFromObject(mesh));
-    }
-    return mesh;
+function addBox(w, h, d, x, y, z, mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    scene.add(m);
+    game.walls.push(new THREE.Box3().setFromObject(m));
+    return m;
 }
 
-// Cria uma parade com um BURACO real para a porta
-function createWallWithOpening(x, z, rotY, doorId, doorColor) {
-    const group = new THREE.Group();
+function createOpening(x, z, rotY, doorId, col) {
+    const g = new THREE.Group();
+    const l = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall); l.position.set(-6, 5, 0);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall); r.position.set(6, 5, 0);
+    const t = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 1), matWall); t.position.set(0, 8.5, 0);
+    const dM = new THREE.Mesh(new THREE.BoxGeometry(5.2, 7.2, 0.4), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3 }));
+    dM.position.set(0, 3.5, 0);
+    g.add(l, r, t, dM);
+    g.position.set(x, 0, z);
+    g.rotation.y = rotY;
+    scene.add(g);
 
-    // Pilar Esquerdo
-    const l = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall);
-    l.position.set(-6, 5, 0);
-    group.add(l);
-
-    // Pilar Direito
-    const r = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall);
-    r.position.set(6, 5, 0);
-    group.add(r);
-
-    // Viga (Topo)
-    const t = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 1), matWall);
-    t.position.set(0, 8.5, 0);
-    group.add(t);
-
-    // Malha da Porta (Veste o buraco)
-    const dMesh = new THREE.Mesh(new THREE.BoxGeometry(5.2, 7.2, 0.4), new THREE.MeshStandardMaterial({ color: doorColor, emissive: doorColor, emissiveIntensity: 0.3 }));
-    dMesh.position.set(0, 3.5, 0);
-    group.add(dMesh);
-
-    group.position.set(x, 0, z);
-    group.rotation.y = rotY;
-    scene.add(group);
-
-    // Adiciona colisões dos pilares e viga
-    group.children.forEach(child => {
-        if (child !== dMesh) game.walls.push(new THREE.Box3().setFromObject(child));
-    });
-
-    // Colisão da Porta
-    const dBox = new THREE.Box3().setFromObject(dMesh);
-    game.doors[doorId] = { mesh: dMesh, box: dBox, open: false };
+    // Colisões pilares
+    game.walls.push(new THREE.Box3().setFromObject(l), new THREE.Box3().setFromObject(r), new THREE.Box3().setFromObject(t));
+    const dB = new THREE.Box3().setFromObject(dM);
+    game.doors[doorId] = { mesh: dM, box: dB, open: false };
 }
 
 function initMap() {
-    // Chão Base
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), matFloor);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // --- HUB CENTRAL (0,0) ---
-    createWallWithOpening(0, -10, 0, 'door1', 0x9d00ff); // Norte -> Sala 1
-    createWallWithOpening(10, 0, Math.PI / 2, 'door2', 0x00ffcc); // Leste -> Sala 2
-    createWallWithOpening(-10, 0, Math.PI / 2, 'door3', 0xffcc00); // Oeste -> Sala 3
-    addBox(21, 10, 1, 0, 5, 10, matWall); // Muralha Sul
+    // HUB
+    createOpening(0, -10, 0, 'door1', 0x9d00ff); // Norte
+    createOpening(10, 0, Math.PI / 2, 'door2', 0x00ffcc); // Leste
+    createOpening(-10, 0, Math.PI / 2, 'door3', 0xffcc00); // Oeste
+    addBox(21, 10, 1, 0, 5, 10, matWall); // Sul
 
-    // --- SALA 1: ALAVANCAS (NORTE) ---
-    addBox(20, 10, 1, 0, 5, -30, matWall); // Parede Norte
-    addBox(1, 10, 20, -10, 5, -20, matWall); // Oeste
-    addBox(1, 10, 20, 10, 5, -20, matWall); // Leste
+    // SALA 1
+    addBox(20, 10, 1, 0, 5, -30, matWall);
+    addBox(1, 10, 20, -10, 5, -20, matWall);
+    addBox(1, 10, 20, 10, 5, -20, matWall);
     [-5, 0, 5].forEach((x, i) => {
-        const g = new THREE.Group();
+        const group = new THREE.Group();
         const base = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.6), new THREE.MeshStandardMaterial({ color: 0x332200 }));
         const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5), new THREE.MeshStandardMaterial({ color: 0xffaa00 }));
         stick.position.y = 0.5; stick.rotation.z = Math.PI / 4;
-        g.add(base, stick); g.position.set(x, 1, -29);
-        g.userData = { id: i, type: 'lever', stick: s, active: false };
-        scene.add(g); game.interactables.push(g);
+        group.add(base, stick); group.position.set(x, 1, -29);
+        group.userData = { id: i, type: 'lever', stick: stick, active: false }; // [FIX] Variável correta: stick
+        scene.add(group); game.interactables.push(group);
     });
 
-    // --- SALA 2: SÍMBOLOS (LESTE) ---
+    // SALA 2
     addBox(1, 10, 20, 30, 5, 0, matWall);
     addBox(20, 10, 1, 20, 5, -10, matWall);
     addBox(20, 10, 1, 20, 5, 10, matWall);
     ["🔯", "☯️", "⚛️"].forEach((icon, i) => {
         const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
         const ctx = canvas.getContext('2d'); ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 90px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon, 64, 64);
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, emissive: 0x00ffcc, emissiveIntensity: 0.5 }));
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, emissive: 0x00ffcc }));
         m.position.set(29.4, 4, -5 + i * 5); m.rotation.y = -Math.PI / 2;
         m.userData = { id: i, type: 'symbol', active: false };
         scene.add(m); game.interactables.push(m);
     });
 
-    // --- SALA 3: ORBES (OESTE) ---
+    // SALA 3
     addBox(1, 10, 20, -30, 5, 0, matWall);
     addBox(20, 10, 1, -20, 5, -10, matWall);
     addBox(20, 10, 1, -20, 5, 10, matWall);
-    [0xff3300, 0x33ff33, 0x9d00ff].forEach((col, i) => {
+    [0xff0000, 0x00ff00, 0x0000ff].forEach((col, i) => {
         const m = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2 }));
-        m.position.set(-29, 3, -5 + i * 5);
+        m.position.set(-29.4, 3, -5 + i * 5); m.rotation.y = Math.PI / 2;
         m.userData = { id: i, type: 'orb', active: false };
         scene.add(m); game.interactables.push(m);
     });
@@ -171,44 +146,33 @@ function initMap() {
 function initPlayer() {
     game.player.mesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 5), matHero);
     game.player.mesh.position.set(0, 2.5, 5);
-    game.player.mesh.castShadow = true;
     scene.add(game.player.mesh);
 }
 
-// --- COLISÃO POR EIXO (SLIDING) ---
 function canMove(vx, vz) {
-    const pBox = new THREE.Box3().setFromObject(game.player.mesh);
-    // Margem de segurança
-    pBox.expandByScalar(-0.4);
-    pBox.min.x += vx; pBox.max.x += vx;
-    pBox.min.z += vz; pBox.max.z += vz;
-
-    for (let wall of game.walls) {
-        if (pBox.intersectsBox(wall)) return false;
-    }
-    for (let id in game.doors) {
-        if (!game.doors[id].open && pBox.intersectsBox(game.doors[id].box)) return false;
-    }
+    const pB = new THREE.Box3().setFromObject(game.player.mesh);
+    pB.expandByScalar(-0.4);
+    pB.min.x += vx; pB.max.x += vx; pB.min.z += vz; pB.max.z += vz;
+    for (let w of game.walls) if (pB.intersectsBox(w)) return false;
+    for (let id in game.doors) if (!game.doors[id].open && pB.intersectsBox(game.doors[id].box)) return false;
     return true;
 }
 
 function update() {
-    const delta = clock.getDelta();
+    const dt = clock.getDelta();
     const p = game.player;
     if (!p.mesh) return;
 
-    let moveX = 0, moveZ = 0;
-    if (game.input.w) moveZ -= p.speed;
-    if (game.input.s) moveZ += p.speed;
-    if (game.input.a) { moveX -= p.speed; p.dir = -1; }
-    if (game.input.d) { moveX += p.speed; p.dir = 1; }
+    let mx = 0, mz = 0;
+    if (game.input.w) mz -= p.speed;
+    if (game.input.s) mz += p.speed;
+    if (game.input.a) { mx -= p.speed; p.dir = -1; }
+    if (game.input.d) { mx += p.speed; p.dir = 1; }
 
-    if (moveX !== 0 || moveZ !== 0) {
-        // Deslizamento: Tenta cada eixo separadamente
-        if (canMove(moveX, 0)) p.mesh.position.x += moveX;
-        if (canMove(0, moveZ)) p.mesh.position.z += moveZ;
-
-        p.timer += delta * 10;
+    if (mx !== 0 || mz !== 0) {
+        if (canMove(mx, 0)) p.mesh.position.x += mx;
+        if (canMove(0, mz)) p.mesh.position.z += mz;
+        p.timer += dt * 10;
         p.frame = Math.floor(p.timer) % 4;
         heroTex.offset.x = p.frame * 0.25;
     } else {
@@ -216,15 +180,11 @@ function update() {
     }
     p.mesh.scale.x = Math.abs(p.mesh.scale.x) * p.dir;
 
-    // Câmera persegue suavemente e não atravessa a parede leste/oeste do hub
-    const camX = Math.max(-8, Math.min(8, p.mesh.position.x));
-    camera.position.lerp(new THREE.Vector3(camX, 10, p.mesh.position.z + 14), 0.1);
+    const cX = Math.max(-8, Math.min(8, p.mesh.position.x));
+    camera.position.lerp(new THREE.Vector3(cX, 10, p.mesh.position.z + 14), 0.1);
     camera.lookAt(p.mesh.position.x, 2, p.mesh.position.z);
-
-    // Billboard
     p.mesh.rotation.y = Math.atan2(camera.position.x - p.mesh.position.x, camera.position.z - p.mesh.position.z);
 
-    // Interações
     let near = false;
     for (let obj of game.interactables) {
         if (p.mesh.position.distanceTo(obj.position) < 5) {
@@ -244,19 +204,41 @@ function handleInteraction(obj) {
         if (game.leverSeq.length === 3) {
             if (JSON.stringify(game.leverSeq) === "[0,2,1]") {
                 showMsg("PASSAGEM NORTE ABERTA!"); game.doors.door1.open = true;
-                const anim = () => { game.doors.door1.mesh.position.y += 0.2; if (game.doors.door1.mesh.position.y < 12) requestAnimationFrame(anim); }; anim();
+                const a = () => { game.doors.door1.mesh.position.y += 0.2; if (game.doors.door1.mesh.position.y < 12) requestAnimationFrame(a); }; a();
             } else {
-                showMsg("RESET."); setTimeout(() => { game.leverSeq = []; game.interactables.forEach(o => { if (o.userData.type === 'lever') { o.userData.active = false; o.userData.stick.rotation.z = Math.PI / 4; } }); }, 800);
+                showMsg("ORDEM INCORRETA. RESET."); setTimeout(() => { game.leverSeq = []; game.interactables.filter(o => o.userData.type === 'lever').forEach(o => { o.userData.active = false; o.userData.stick.rotation.z = Math.PI / 4; }); }, 800);
             }
         }
     }
-    // Lógica para as outras salas...
+    if (d.type === 'symbol' && !d.active) {
+        d.active = true; obj.material.emissiveIntensity = 3; game.symbolSeq.push(d.id);
+        if (game.symbolSeq.length === 3) {
+            if (JSON.stringify(game.symbolSeq) === "[2,0,1]") {
+                showMsg("PASSAGEM LESTE ABERTA!"); game.doors.door2.open = true;
+                const a = () => { game.doors.door2.mesh.position.y += 0.2; if (game.doors.door2.mesh.position.y < 12) requestAnimationFrame(a); }; a();
+            } else {
+                showMsg("RESETS SYMBOLS."); setTimeout(() => { game.symbolSeq = []; game.interactables.filter(o => o.userData.type === 'symbol').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 1; }); }, 1000);
+            }
+        }
+    }
+    if (d.type === 'orb' && !d.active) {
+        d.active = true; obj.material.emissiveIntensity = 5; game.orbSeq.push(d.id);
+        if (game.orbSeq.length === 3) {
+            if (JSON.stringify(game.orbSeq) === "[1,0,2]") {
+                showMsg("PASSAGEM OESTE ABERTA!"); game.doors.door3.open = true;
+                const a = () => { game.doors.door3.mesh.position.y += 0.2; if (game.doors.door3.mesh.position.y < 12) requestAnimationFrame(a); }; a();
+            } else {
+                showMsg("RESET ORBES."); setTimeout(() => { game.orbSeq = []; game.interactables.filter(o => o.userData.type === 'orb').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 2; }); }, 1000);
+            }
+        }
+    }
 }
 
 function showMsg(t) {
+    const mb = document.getElementById('msg-box');
     document.getElementById('msg-text').innerText = t;
-    document.getElementById('msg-box').classList.remove('hidden');
-    document.getElementById('msg-box').onclick = () => document.getElementById('msg-box').classList.add('hidden');
+    mb.classList.remove('hidden');
+    mb.onclick = () => mb.classList.add('hidden');
 }
 
 const loop = () => { requestAnimationFrame(loop); update(); renderer.render(scene, camera); };
