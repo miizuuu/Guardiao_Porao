@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 
 /**
- * O GUARDIÃO DO PORÃO - VERSÃO ANIMADA E COLORIDA
- * Foco: Câmera Próxima, Animações de Sprite, Cores Vibrantes (Ouro, Laranja, Púrpura).
+ * O GUARDIÃO DO PORÃO - VERSÃO SUPREMA
+ * - Fundo PNG removido via Shader (Chroma Key Black)
+ * - Animação Quadro a Quadro (Spritesheet 4x1)
+ * - Colisões de Porta Reais
+ * - Todas as 4 Salas Integradas
  */
 
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
-
-// Fundo Místico (Roxo Escuro e Quente)
-scene.background = new THREE.Color(0x15051a);
-scene.fog = new THREE.Fog(0x15051a, 5, 45);
+scene.background = new THREE.Color(0x0a0510);
+scene.fog = new THREE.Fog(0x0a0510, 5, 50);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), antialias: true });
@@ -18,89 +19,104 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 
-// --- ILUMINAÇÃO (QUENTE E MÁGICA) ---
-const hemiLight = new THREE.HemisphereLight(0xffaa00, 0x440066, 1.2); // Ouro e Púrpura
-scene.add(hemiLight);
+// --- ILUMINAÇÃO "PEAK" ---
+const hemi = new THREE.HemisphereLight(0xffaa00, 0x440066, 1.5);
+scene.add(hemi);
 
-const sunLight = new THREE.DirectionalLight(0xff7700, 1.0); // Laranja Forte
-sunLight.position.set(10, 20, 10);
-sunLight.castShadow = true;
-scene.add(sunLight);
+const sun = new THREE.DirectionalLight(0xff7700, 1.2);
+sun.position.set(10, 20, 10);
+sun.castShadow = true;
+scene.add(sun);
 
 // --- ASSETS ---
 const texLoader = new THREE.TextureLoader();
 const assets = './public/assets/';
 
-const load = (f, rx = 1, ry = 1) => {
-    const t = texLoader.load(assets + f, undefined, undefined, () => console.warn("Faltando: " + f));
+// Função para carregar textura com repetição
+const loadT = (f, rx = 1, ry = 1) => {
+    const t = texLoader.load(assets + f);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry);
     return t;
 };
 
-// Materiais Coloridos
-const floorMat = new THREE.MeshStandardMaterial({ map: load('floor.png', 12, 12), color: 0xffaa44, roughness: 0.6 });
-const wallMat = new THREE.MeshStandardMaterial({ map: load('wall.png', 5, 1), color: 0xff5533, roughness: 0.8 });
-const heroMat = new THREE.MeshStandardMaterial({
-    map: texLoader.load(assets + 'hero.png'),
+const floorMat = new THREE.MeshStandardMaterial({ map: loadT('floor.png', 15, 15), color: 0xffaa44 });
+const wallMat = new THREE.MeshStandardMaterial({ map: loadT('wall.png', 5, 1), color: 0xff5533 });
+
+// --- SHADER PARA REMOVER FUNDO PRETO DO PERSONAGEM ---
+const heroTexture = texLoader.load(assets + 'hero.png');
+heroTexture.magFilter = THREE.NearestFilter; // Pixel art look
+heroTexture.repeat.set(0.25, 1); // Assume spritesheet 4x1
+
+const heroMat = new THREE.ShaderMaterial({
+    uniforms: {
+        tDiffuse: { value: heroTexture },
+        offset: { value: new THREE.Vector2(0, 0) }
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 offset;
+        varying vec2 vUv;
+        void main() {
+            vec2 uv = vUv * vec2(0.25, 1.0) + offset;
+            vec4 color = texture2D(tDiffuse, uv);
+            // Chroma key: remove preto puro ou quase preto
+            if (color.r < 0.1 && color.g < 0.1 && color.b < 0.1) discard;
+            gl_FragColor = color;
+        }
+    `,
     transparent: true,
-    alphaTest: 0.4,
-    emissive: 0xff6600,
-    emissiveIntensity: 0.15
+    side: THREE.DoubleSide
 });
 
 // --- ESTADO DO JOGO ---
 const game = {
-    player: {
-        mesh: null,
-        state: 'idle', // idle, walking, attacking, interacting
-        speed: 0.16,
-        radius: 1.0,
-        bob: 0,
-        animTime: 0,
-        dir: 1 // 1 = direita, -1 = esquerda
-    },
-    walls: [],
+    player: { mesh: null, speed: 0.18, frame: 0, animTimer: 0, dir: 1, state: 'idle' },
+    walls: [], // {box: Box3, active: bool}
     interactables: [],
-    leverSeq: [],
-    symbolSeq: [],
-    orbSeq: [],
-    room2: false,
-    room3: false,
+    leverSeq: [], symbolSeq: [], orbSeq: [],
     inv: []
 };
 
-const keys = { w: false, a: false, s: false, d: false, e: false };
+const keys = { w: false, a: false, s: false, d: false, e: false, ' ': false };
 
-// --- CONSTRUTORES ---
+// --- CONSTRUÇÃO DO MUNDO ---
 
-function addWall(x, z, w, d, color = 0xff5533) {
-    const mat = wallMat.clone();
-    mat.color.set(color);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 10, d), mat);
-    mesh.position.set(x, 5, z);
+function addBox(w, h, d, x, y, z, mat, isDoor = false) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
     scene.add(mesh);
-    game.walls.push({ x, z, w: w / 2 + 0.8, d: d / 2 + 0.8, active: true });
-    return mesh;
+    const box = new THREE.Box3().setFromObject(mesh);
+    const wallObj = { box, mesh, active: true, isDoor };
+    game.walls.push(wallObj);
+    return wallObj;
 }
 
-function createHub() {
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), floorMat);
+function createRoom1() {
+    // Chão Hub
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Paredes Sala 1 (Laranja/Ouro)
-    addWall(0, -15, 30, 1, 0xff7700);
-    addWall(-15, 5, 1, 40, 0xff7700);
-    addWall(15, 5, 1, 40, 0xff7700);
+    // Paredes
+    addBox(30, 10, 1, 0, 5, -15, wallMat);   // Norte
+    addBox(1, 10, 40, -15, 5, 5, wallMat);  // Oeste
+    addBox(1, 10, 40, 15, 5, 5, wallMat);   // Leste
 
-    // Puzzle 1: Alavancas
+    // Alavancas
     for (let i = 0; i < 3; i++) {
         const g = new THREE.Group();
-        const b = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.8, 0.6), new THREE.MeshStandardMaterial({ color: 0x442200 }));
-        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.5), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff5500 }));
-        s.position.y = 0.6; s.rotation.z = Math.PI / 4;
+        const b = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), new THREE.MeshStandardMaterial({ color: 0x332200 }));
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5), new THREE.MeshStandardMaterial({ color: 0xffaa00 }));
+        s.position.y = 0.5; s.rotation.z = Math.PI / 4;
         g.add(b); g.add(s);
         g.position.set(-8 + i * 8, 1, -14);
         g.userData = { id: i, type: 'lever', stick: s, active: false };
@@ -108,181 +124,138 @@ function createHub() {
         game.interactables.push(g);
     }
 
-    // Porta 1
-    const dG = new THREE.Group();
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(5, 8, 0.6), new THREE.MeshStandardMaterial({ color: 0x9d00ff, emissive: 0x9d00ff, emissiveIntensity: 0.4 }));
-    leaf.position.x = 2.5;
-    dG.add(leaf);
-    dG.position.set(14.5, 0, -4);
-    dG.rotation.y = Math.PI / 2;
-    scene.add(dG);
-
-    const doorWall = { x: 14.5, z: -4, w: 0.5, d: 3, active: true, name: 'door1' };
-    game.walls.push(doorWall);
-    game.door1 = { g: dG, leaf, wall: doorWall };
+    // PORTA 1 (BLOQUEIO REAL)
+    game.door1 = addBox(1, 8, 6, 15, 4, -5, new THREE.MeshStandardMaterial({ color: 0x9d00ff, emissive: 0x9d00ff, emissiveIntensity: 0.5 }), true);
 }
 
 function createRoom2() {
-    if (game.room2) return; game.room2 = true;
+    // Sala dos Símbolos
+    addBox(30, 10, 1, 30, 5, -20, wallMat); // Norte R2
+    addBox(30, 10, 1, 30, 5, 10, wallMat);  // Sul R2
+    addBox(1, 10, 30, 45, 5, -5, wallMat);  // Leste R2
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(35, 0, -4);
-    scene.add(floor);
-
-    addWall(35, -24, 40, 1, 0x33ff33); // Norte (Verde)
-    addWall(35, 16, 40, 1, 0x33ff33);  // Sul
-    addWall(55, -4, 1, 40, 0x33ff33);  // Leste
-
-    // Símbolos Gigantes (Verdes)
-    const chars = ["🔯", "☯️", "⚛️"];
-    chars.forEach((c, i) => {
+    const icons = ["🔯", "☯️", "⚛️"];
+    icons.forEach((icon, i) => {
         const canvas = document.createElement('canvas');
         canvas.width = 128; canvas.height = 128;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#33ff33'; ctx.font = 'bold 100px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(c, 64, 64);
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, emissive: 0x33ff33, emissiveIntensity: 0.8 }));
-        m.position.set(25 + i * 12, 4.5, -23.2);
+        ctx.fillText(icon, 64, 64);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, emissive: 0x33ff33, emissiveIntensity: 0.5 }));
+        m.position.set(25 + i * 10, 4, -19.2);
         m.userData = { id: i, type: 'symbol', active: false };
         scene.add(m);
         game.interactables.push(m);
     });
 
-    // Porta 2
-    const door2 = new THREE.Group();
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(6, 8, 0.6), new THREE.MeshStandardMaterial({ color: 0x33ff33, emissive: 0x33ff33, emissiveIntensity: 0.5 }));
-    leaf.position.x = 3; door2.add(leaf);
-    door2.position.set(35, 0, 15.5);
-    scene.add(door2);
-    const wall = { x: 35, z: 15.5, w: 4, d: 0.5, active: true, name: 'door2' };
-    game.walls.push(wall);
-    game.door2 = { g: door2, leaf, wall };
+    // PORTA 2
+    game.door2 = addBox(6, 8, 1, 30, 4, 10, new THREE.MeshStandardMaterial({ color: 0x33ff33, emissive: 0x33ff33, emissiveIntensity: 0.5 }), true);
 }
 
 function createRoom3() {
-    if (game.room3) return; game.room3 = true;
+    // Labirinto/Orbes
+    addBox(30, 10, 1, 30, 5, 60, wallMat); // Sul R3
+    addBox(1, 10, 50, 15, 5, 35, wallMat); // Oeste R3
+    addBox(1, 10, 50, 45, 5, 35, wallMat); // Leste R3
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 50), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(35, 0, 55);
-    scene.add(floor);
-
-    addWall(35, 80, 40, 1, 0x9d00ff); // Sul (Púrpura)
-    addWall(15, 55, 1, 50, 0x9d00ff); // Oeste
-    addWall(55, 55, 1, 50, 0x9d00ff); // Leste
-
-    [0xff3300, 0x33ff33, 0x9d00ff].forEach((col, i) => {
+    const colors = [0xff3300, 0x33ff33, 0x9d00ff];
+    colors.forEach((col, i) => {
         const m = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2 }));
-        m.position.set(23 + i * 12, 3, 70);
+        m.position.set(25 + i * 8, 3, 50);
         m.userData = { id: i, type: 'orb', active: false };
         scene.add(m);
         game.interactables.push(m);
     });
 }
 
-// --- JOGADOR ANIMADO ---
-
-function initPlayer() {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 5.2), heroMat);
-    mesh.position.set(0, 2.6, 5);
-    mesh.castShadow = true;
-    scene.add(mesh);
-    game.player.mesh = mesh;
-}
-
-window.onkeydown = e => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = true; };
-window.onkeyup = e => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; };
-
-function checkCollision(nx, nz) {
-    for (let w of game.walls) {
-        if (!w.active) continue;
-        if (nx > w.x - w.w && nx < w.x + w.w && nz > w.z - w.d && nz < w.z + w.d) return true;
+function createBoss() {
+    // Arena do Cérbero
+    const boss = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 6), new THREE.MeshStandardMaterial({ color: 0x440000 }));
+    boss.add(body);
+    for (let i = 0; i < 3; i++) {
+        const head = new THREE.Mesh(new THREE.SphereGeometry(2), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000 }));
+        head.position.set(-4 + i * 4, 5, 2);
+        boss.add(head);
     }
-    return false;
+    boss.position.set(30, 3, 90);
+    scene.add(boss);
 }
 
-function animatePlayer(delta) {
+// --- LOGICA DE JOGO ---
+
+function handleCollision(vx, vz) {
     const p = game.player;
-    if (!p.mesh) return;
+    const oldPos = p.mesh.position.clone();
 
-    if (p.state === 'walking') {
-        p.bob += delta * 12;
-        p.mesh.position.y = 2.6 + Math.sin(p.bob) * 0.15; // Bobbing de altura
-        p.mesh.rotation.z = Math.sin(p.bob * 0.5) * 0.08; // Balanço lateral
-        p.mesh.scale.x = (p.dir * 1) + (Math.sin(p.bob) * 0.05); // Pulsar de largura
-    } else if (p.state === 'attacking') {
-        p.animTime += delta * 15;
-        p.mesh.rotation.z = Math.sin(p.animTime) * 0.4; // Balanço de ataque
-        p.mesh.scale.set(1.2, 1.2, 1);
-        if (p.animTime > Math.PI * 2) { p.state = 'idle'; p.animTime = 0; }
-    } else if (p.state === 'interacting') {
-        p.animTime += delta * 10;
-        p.mesh.scale.y = 1 + Math.sin(p.animTime) * 0.1; // "Agachar" para interagir
-        if (p.animTime > Math.PI) { p.state = 'idle'; p.animTime = 0; }
-    } else {
-        // Idle
-        p.mesh.position.y = 2.6 + Math.sin(Date.now() * 0.002) * 0.05;
-        p.mesh.rotation.z = 0;
-        p.mesh.scale.set(p.dir, 1, 1);
+    // Testa X
+    p.mesh.position.x += vx;
+    const pBox = new THREE.Box3().setFromObject(p.mesh);
+    let hit = false;
+    for (let w of game.walls) {
+        if (w.active && pBox.intersectsBox(w.box)) { hit = true; break; }
     }
+    if (hit) p.mesh.position.x = oldPos.x;
+
+    // Testa Z
+    p.mesh.position.z += vz;
+    const pZBox = new THREE.Box3().setFromObject(p.mesh);
+    hit = false;
+    for (let w of game.walls) {
+        if (w.active && pZBox.intersectsBox(w.box)) { hit = true; break; }
+    }
+    if (hit) p.mesh.position.z = oldPos.z;
+}
+
+function updateAnimation(delta) {
+    const p = game.player;
+    if (p.state === 'walking') {
+        p.animTimer += delta * 10;
+        p.frame = Math.floor(p.animTimer) % 4;
+        heroMat.uniforms.offset.value.set(p.frame * 0.25, 0);
+    } else {
+        heroMat.uniforms.offset.value.set(0, 0); // Frame idle
+    }
+    // Flip horizontal
+    p.mesh.scale.x = Math.abs(p.mesh.scale.x) * p.dir;
 }
 
 function update() {
     const delta = clock.getDelta();
     if (!game.player.mesh) return;
-    const p = game.player;
 
-    // Movimento
     let vx = 0, vz = 0;
-    if (keys.w) vz -= p.speed;
-    if (keys.s) vz += p.speed;
-    if (keys.a) { vx -= p.speed; p.dir = -1; }
-    if (keys.d) { vx += p.speed; p.dir = 1; }
+    if (keys.w) vz -= game.player.speed;
+    if (keys.s) vz += game.player.speed;
+    if (keys.a) { vx -= game.player.speed; game.player.dir = -1; }
+    if (keys.d) { vx += game.player.speed; game.player.dir = 1; }
 
     if (vx !== 0 || vz !== 0) {
-        if (p.state !== 'attacking' && p.state !== 'interacting') p.state = 'walking';
+        game.player.state = 'walking';
+        handleCollision(vx, vz);
     } else {
-        if (p.state === 'walking') p.state = 'idle';
+        game.player.state = 'idle';
     }
 
-    const nx = p.mesh.position.x + vx;
-    const nz = p.mesh.position.z + vz;
+    updateAnimation(delta);
 
-    if (!checkCollision(nx, p.mesh.position.z)) p.mesh.position.x = nx;
-    if (!checkCollision(p.mesh.position.x, nz)) p.mesh.position.z = nz;
+    // Câmera Perfeita
+    camera.position.lerp(new THREE.Vector3(game.player.mesh.position.x, 10, game.player.mesh.position.z + 14), 0.1);
+    camera.lookAt(game.player.mesh.position.x, 2, game.player.mesh.position.z);
 
-    animatePlayer(delta);
-
-    // Billboard
-    p.mesh.rotation.y = Math.atan2(camera.position.x - p.mesh.position.x, camera.position.z - p.mesh.position.z);
-
-    // CÂMERA MAIS PRÓXIMA
-    const targetCam = new THREE.Vector3(p.mesh.position.x, 8, p.mesh.position.z + 12); // Posição mais perto e baixa
-    camera.position.lerp(targetCam, 0.12);
-    camera.lookAt(p.mesh.position.x, 2, p.mesh.position.z);
+    // Billboarding suave
+    game.player.mesh.rotation.y = Math.atan2(camera.position.x - game.player.mesh.position.x, camera.position.z - game.player.mesh.position.z);
 
     // Interações
-    let nearInteractable = null;
+    let near = false;
     game.interactables.forEach(obj => {
-        const dist = p.mesh.position.distanceTo(obj.position);
-        if (dist < 5) {
-            nearInteractable = obj;
+        if (game.player.mesh.position.distanceTo(obj.position) < 5) {
+            near = true;
             document.getElementById('interaction-label').classList.remove('hidden');
-            if (keys.e) {
-                p.state = 'interacting';
-                handleInteraction(obj);
-                keys.e = false;
-            }
+            if (keys.e) { handleInteraction(obj); keys.e = false; }
         }
     });
-    if (!nearInteractable) document.getElementById('interaction-label').classList.add('hidden');
-
-    // Ataque (Espaço)
-    if (keys[' ']) {
-        p.state = 'attacking';
-        // Futura lógica de dano aqui
-    }
+    if (!near) document.getElementById('interaction-label').classList.add('hidden');
 }
 
 function handleInteraction(obj) {
@@ -292,13 +265,12 @@ function handleInteraction(obj) {
         game.leverSeq.push(d.id);
         if (game.leverSeq.length === 3) {
             if (JSON.stringify(game.leverSeq) === "[0,2,1]") {
-                showMsg("PORTA MÍSTICA ABERTA!");
-                game.door1.wall.active = false;
-                addToInv("Faca Curta", "slot-1");
-                let f = 0; const a = () => { f++; game.door1.leaf.position.x += 0.15; if (f < 40) requestAnimationFrame(a); }; a();
-                createRoom2();
+                showMsg("PORTA ROXA ABERTA!");
+                game.door1.active = false;
+                game.door1.mesh.visible = false;
+                addToInv("slot-1", "🗡️");
             } else {
-                showMsg("AS ALAVANCAS TRAVARAM...");
+                showMsg("RESETANDO...");
                 setTimeout(() => { game.leverSeq = []; game.interactables.filter(o => o.userData.type === 'lever').forEach(o => { o.userData.active = false; o.userData.stick.rotation.z = Math.PI / 4; }); }, 800);
             }
         }
@@ -309,36 +281,20 @@ function handleInteraction(obj) {
         game.symbolSeq.push(d.id);
         if (game.symbolSeq.length === 3) {
             if (JSON.stringify(game.symbolSeq) === "[2,0,1]") {
-                showMsg(" ENERGIA VERDE LIBERADA!");
-                game.door2.wall.active = false;
-                addToInv("Pistola Velha", "slot-2");
-                let f = 0; const a = () => { f++; game.door2.leaf.position.x += 0.18; if (f < 40) requestAnimationFrame(a); }; a();
-                createRoom3();
+                showMsg("PASSAGEM VERDE LIBERADA!");
+                game.door2.active = false;
+                game.door2.mesh.visible = false;
+                addToInv("slot-2", "🔫");
             } else {
-                showMsg("ORDEM INCORRETA.");
-                setTimeout(() => { game.symbolSeq = []; game.interactables.filter(o => o.userData.type === 'symbol').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 0.8; }); }, 1000);
-            }
-        }
-    }
-
-    if (d.type === 'orb' && !d.active) {
-        d.active = true; obj.material.emissiveIntensity = 6;
-        game.orbSeq.push(d.id);
-        if (game.orbSeq.length === 3) {
-            if (JSON.stringify(game.orbSeq) === "[1,0,2]") {
-                showMsg("O CETRO RÚNICO É SEU!");
-                addToInv("Cetro Rúnico", "slot-3");
-            } else {
-                showMsg("RITUAL FALHOU.");
-                setTimeout(() => { game.orbSeq = []; game.interactables.filter(o => o.userData.type === 'orb').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 1.5; }); }, 1000);
+                showMsg("ERROU.");
+                setTimeout(() => { game.symbolSeq = []; game.interactables.filter(o => o.userData.type === 'symbol').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 0.5; }); }, 1000);
             }
         }
     }
 }
 
-// UI HELPERS
 function showMsg(t) { const b = document.getElementById('msg-box'); document.getElementById('msg-text').innerText = t; b.classList.remove('hidden'); b.onclick = () => b.classList.add('hidden'); }
-function addToInv(name, id) { const s = document.getElementById(id); s.classList.add('active'); game.inv.push(name); document.getElementById('weapon-display').innerText = name.toUpperCase(); }
+function addToInv(id, icon) { const s = document.getElementById(id); s.classList.add('active'); s.setAttribute('data-label', icon); }
 
 function loop() {
     requestAnimationFrame(loop);
@@ -346,12 +302,21 @@ function loop() {
     renderer.render(scene, camera);
 }
 
-// BOOT
-createHub();
-initPlayer();
+// --- BOOT ---
+createRoom1();
+createRoom2();
+createRoom3();
+createBoss();
+
+const charPlane = new THREE.Mesh(new THREE.PlaneGeometry(4, 5), heroMat);
+charPlane.position.set(0, 2.5, 5);
+scene.add(charPlane);
+game.player.mesh = charPlane;
+
 loop();
 
-window.onload = () => {
-    let p = 0; const i = setInterval(() => { p += 4; document.getElementById('progress-fill').style.width = p + '%'; if (p >= 100) { clearInterval(i); document.getElementById('loader').style.display = 'none'; } }, 30);
-};
-window.onresize = () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); };
+window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = true; });
+window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
+window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+setTimeout(() => { document.getElementById('loader').style.display = 'none'; }, 2000);
