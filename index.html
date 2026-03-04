@@ -21,7 +21,7 @@
 
         <div id="ui-layer">
             <div id="top-bar">
-                <div id="inventory-slots">
+                <div id="inventory">
                     <div class="slot" id="slot-1" data-label="🗡️"></div>
                     <div class="slot" id="slot-2" data-label="🔫"></div>
                     <div class="slot" id="slot-3" data-label="🔮"></div>
@@ -29,24 +29,24 @@
                 <div id="weapon-display">MÃOS VAZIAS</div>
             </div>
 
-            <div id="interaction-label" class="hidden">PRESSIONE [E]</div>
+            <div id="interaction-label" class="hidden">PRESSIONE [E] PARA INTERAGIR</div>
 
-            <div id="msg-box" class="hidden">
-                <p id="msg-text"></p>
-                <small>Clique para fechar</small>
+            <div id="dialog-box" class="hidden">
+                <p id="dialog-text"></p>
+                <button id="close-dialog">CONTINUAR</button>
             </div>
 
             <div id="health-hud">
-                <div id="hp-bar-fill"></div>
+                <div id="hp-bar"></div>
             </div>
         </div>
 
         <div id="loader">
             <h1>O GUARDIÃO</h1>
-            <div class="progress">
-                <div id="progress-fill"></div>
+            <div class="progress-container">
+                <div id="progress-bar"></div>
             </div>
-            <p>CONSTRUINDO O MUNDO...</p>
+            <p>CONSTRUINDO O PORÃO...</p>
         </div>
     </div>
     <script type="module" src="./main.js"></script>

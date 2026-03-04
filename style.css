@@ -1,13 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
 
 :root {
     --gold: #ffcc00;
     --orange: #ff7700;
-    --red: #ff3333;
-    --magical-purple: #9d00ff;
-    --magical-green: #33ff33;
-    --bg-dark: #0a0510;
-    --ui-bg: rgba(15, 5, 20, 0.85);
+    --purple: #9d00ff;
+    --green: #33ff33;
+    --bg-dark: #050508;
 }
 
 * {
@@ -15,11 +13,13 @@
     padding: 0;
     box-sizing: border-box;
     font-family: 'Outfit', sans-serif;
+    user-select: none;
 }
 
 body {
-    background: var(--bg-dark);
+    background-color: var(--bg-dark);
     overflow: hidden;
+    color: white;
 }
 
 #game-container {
@@ -29,23 +29,21 @@ body {
 }
 
 #bg {
-    position: absolute;
-    top: 0;
-    left: 0;
+    display: block;
     width: 100%;
     height: 100%;
 }
 
-/* HUD NOVO - ALTA VISIBILIDADE E CORES VIBRANTES */
+/* UI LAYER */
 #ui-layer {
     position: absolute;
     inset: 0;
     padding: 30px;
     pointer-events: none;
+    z-index: 10;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    z-index: 10;
 }
 
 #top-bar {
@@ -54,31 +52,30 @@ body {
     align-items: center;
 }
 
-#inventory-slots {
+#inventory {
     display: flex;
     gap: 15px;
     pointer-events: all;
 }
 
 .slot {
-    width: 70px;
-    height: 70px;
-    background: var(--ui-bg);
-    border: 2px solid var(--magical-purple);
-    border-radius: 15px;
+    width: 65px;
+    height: 65px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2.5rem;
-    transition: 0.3s;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 0 15px rgba(157, 0, 255, 0.2);
+    font-size: 2rem;
+    transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: blur(5px);
 }
 
 .slot.active {
     border-color: var(--gold);
-    box-shadow: 0 0 25px rgba(255, 204, 0, 0.5);
-    transform: scale(1.15) rotate(5deg);
+    box-shadow: 0 0 20px rgba(255, 204, 0, 0.4);
+    transform: scale(1.1);
 }
 
 .slot.active::after {
@@ -89,136 +86,139 @@ body {
     color: var(--gold);
     font-weight: 900;
     letter-spacing: 5px;
-    font-size: 1.4rem;
-    text-shadow: 2px 2px 0px rgba(255, 119, 0, 0.5);
-    background: var(--ui-bg);
+    font-size: 1.2rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.5);
     padding: 10px 20px;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid var(--orange);
 }
 
+/* INTERACTION */
 #interaction-label {
     position: absolute;
-    top: 65%;
+    top: 60%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: linear-gradient(45deg, var(--gold), var(--orange));
-    color: #000;
-    padding: 12px 35px;
+    background: var(--gold);
+    color: black;
+    padding: 12px 30px;
     font-weight: 900;
-    border-radius: 40px;
-    box-shadow: 0 0 30px rgba(255, 204, 0, 0.6);
-    letter-spacing: 2px;
-    font-size: 1.1rem;
-    animation: bounceScale 0.8s infinite alternate ease-in-out;
+    border-radius: 50px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    letter-spacing: 1px;
+    animation: pulse 1.5s infinite;
 }
 
-#msg-box {
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.9;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+        opacity: 1;
+    }
+}
+
+/* DIALOG */
+#dialog-box {
     position: absolute;
-    bottom: 50px;
+    bottom: 12%;
     left: 50%;
     transform: translateX(-50%);
-    width: 85%;
-    max-width: 650px;
-    background: var(--ui-bg);
-    border: 2px solid var(--magical-green);
-    border-left: 10px solid var(--magical-green);
-    padding: 30px;
-    border-radius: 15px;
-    backdrop-filter: blur(20px);
+    width: 80%;
+    max-width: 600px;
+    background: rgba(10, 10, 20, 0.9);
+    border-left: 8px solid var(--purple);
+    padding: 25px;
+    border-radius: 5px 15px 15px 5px;
+    backdrop-filter: blur(15px);
     pointer-events: all;
-    cursor: pointer;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
 }
 
-#msg-text {
-    font-size: 1.15rem;
-    color: #fff;
+#dialog-text {
+    font-size: 1.2rem;
     line-height: 1.5;
-    margin-bottom: 5px;
+    margin-bottom: 20px;
 }
 
-small {
-    color: var(--magical-green);
-    font-weight: 900;
-    letter-spacing: 1px;
+#close-dialog {
+    background: var(--purple);
+    color: white;
+    border: none;
+    padding: 8px 25px;
+    border-radius: 4px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
 }
 
+/* HP HUD */
 #health-hud {
-    position: absolute;
-    bottom: 30px;
-    left: 30px;
     width: 280px;
-    height: 18px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 15px;
-    border: 2px solid var(--red);
+    height: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
+    margin-bottom: 30px;
 }
 
-#hp-bar-fill {
+#hp-bar {
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, var(--red), var(--orange));
-    box-shadow: 0 0 15px var(--red);
-    transition: 0.5s;
+    background: linear-gradient(90deg, #ff3333, #800);
+    box-shadow: 0 0 10px rgba(255, 51, 51, 0.3);
 }
 
-/* LOADING */
+/* LOADER */
 #loader {
     position: absolute;
     inset: 0;
-    background: var(--bg-dark);
+    background: #050508;
+    z-index: 1000;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 100;
 }
 
 #loader h1 {
-    font-size: 5rem;
+    font-size: 4rem;
+    font-weight: 900;
     letter-spacing: 20px;
+    margin-bottom: 30px;
     color: white;
-    margin-bottom: 25px;
-    text-shadow: 0 0 30px var(--magical-purple);
 }
 
-.progress {
-    width: 400px;
-    height: 6px;
-    background: #221133;
-    border-radius: 10px;
-    overflow: hidden;
+.progress-container {
+    width: 350px;
+    height: 4px;
+    background: #222;
 }
 
-#progress-fill {
+#progress-bar {
     width: 0%;
     height: 100%;
-    background: linear-gradient(90deg, var(--magical-purple), var(--magical-green));
-    box-shadow: 0 0 20px var(--magical-green);
-}
-
-@keyframes bounceScale {
-    from {
-        transform: translate(-50%, -50%) scale(1);
-    }
-
-    to {
-        transform: translate(-50%, -50%) scale(1.15);
-    }
+    background: var(--gold);
+    box-shadow: 0 0 15px var(--gold);
 }
 
 .hidden {
     display: none !important;
 }
 
-/* VIGNETTE COLORIDA */
+/* VIGNETTE */
 #game-container::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle, transparent 30%, rgba(50, 0, 50, 0.3) 100%);
+    background: radial-gradient(circle, transparent 30%, rgba(0, 0, 0, 0.6) 100%);
     pointer-events: none;
     z-index: 5;
 }
