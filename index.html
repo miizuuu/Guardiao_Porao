@@ -4,51 +4,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O Guardião do Porão - Edição Definitiva</title>
-    <link rel="stylesheet" href="./style.css">
-    <script type="importmap">
-        {
-          "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-          }
+    <title>O Guardião do Porão</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
         }
-    </script>
+
+        #bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ui {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            color: white;
+            font-family: sans-serif;
+        }
+
+        #loader {
+            position: fixed;
+            inset: 0;
+            background: #050510;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .bar-bg {
+            width: 300px;
+            height: 10px;
+            background: #222;
+            border-radius: 5px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+
+        #bar {
+            width: 0%;
+            height: 100%;
+            background: #ffcc00;
+            transition: width 0.3s;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #msg-box {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #ffcc00;
+            pointer-events: all;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        #interact-hint {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ffcc00;
+            color: #000;
+            padding: 10px 20px;
+            font-weight: bold;
+            border-radius: 20px;
+        }
+    </style>
 </head>
 
 <body>
-    <div id="game-container">
-        <canvas id="bg"></canvas>
-
-        <div id="ui-layer">
-            <div id="top-bar">
-                <div id="inventory">
-                    <div class="slot" id="slot-1" data-label="🗡️"></div>
-                    <div class="slot" id="slot-2" data-label="🔫"></div>
-                    <div class="slot" id="slot-3" data-label="🔮"></div>
-                </div>
-                <div id="weapon-display">MÃOS VAZIAS</div>
-            </div>
-
-            <div id="interaction-label" class="hidden">PRESSIONE [E] PARA INTERAGIR</div>
-
-            <div id="msg-box" class="hidden">
-                <p id="msg-text"></p>
-                <small>Clique para continuar</small>
-            </div>
-
-            <div id="health-hud">
-                <div id="hp-bar"></div>
-            </div>
-        </div>
-
-        <div id="loader">
-            <h1>O GUARDIÃO</h1>
-            <div class="progress-container">
-                <div id="progress-bar"></div>
-            </div>
-            <p>CONSTRUINDO O PORÃO...</p>
+    <div id="loader">
+        <h1 style="letter-spacing: 10px;">O GUARDIÃO</h1>
+        <div class="bar-bg">
+            <div id="bar"></div>
         </div>
     </div>
+
+    <canvas id="bg"></canvas>
+
+    <div id="ui">
+        <div id="interact-hint" class="hidden">[E] INTERAGIR</div>
+        <div id="msg-box" class="hidden">
+            <p id="msg-text"></p>
+            <small>Clique para fechar</small>
+        </div>
+    </div>
+
+    <!-- CARGA GARANTIDA DO THREE.JS -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
     <script type="module" src="./main.js"></script>
 </body>
 
