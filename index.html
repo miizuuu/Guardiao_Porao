@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description"
-        content="O Guardião do Porão - Um jogo de puzzle e aventura 2.5D ambientado em um porão misterioso.">
+    <meta name="description" content="O Guardião do Porão - Aventura Épica 2.5D">
     <title>O Guardião do Porão</title>
     <link rel="stylesheet" href="./style.css">
     <script type="importmap">
@@ -31,23 +30,27 @@
 
             <div id="dialog-box" class="hidden">
                 <p id="dialog-text"></p>
-                <button id="close-dialog">Continuar</button>
+                <button id="close-dialog">Entendido</button>
             </div>
 
             <div id="status-bar">
                 <div id="health-bar-container">
                     <div id="health-bar"></div>
                 </div>
-                <div id="weapon-name">Mãos Vazias</div>
+                <div id="weapon-info">
+                    <div id="weapon-name">Mãos Vazias</div>
+                </div>
             </div>
 
             <div id="interaction-prompt" class="hidden">Pressione [E] para interagir</div>
         </div>
 
         <div id="loading-screen">
-            <h1>O Guardião do Porão</h1>
-            <div class="loader"></div>
-            <p>Entrando nas profundezas...</p>
+            <h1>O Guardião</h1>
+            <div class="loader-container">
+                <div class="loader-bar"></div>
+            </div>
+            <p style="margin-top: 20px; letter-spacing: 2px;">CARREGANDO AS PROFUNDEZAS...</p>
         </div>
     </div>
     <script type="module" src="./main.js"></script>
