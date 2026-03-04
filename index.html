@@ -4,321 +4,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>O Guardião do Porão - EDIÇÃO LUZ</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;900&display=swap');
-
-        :root {
-            --accent: #d4af37;
-            --bg: #1a1a1a;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Outfit', sans-serif;
-        }
-
-        body {
-            background-color: #222;
-            overflow: hidden;
-            color: white;
-        }
-
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-        }
-
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-            display: block;
-        }
-
-        #ui {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            pointer-events: none;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        #inventory {
-            display: flex;
-            gap: 10px;
-            pointer-events: all;
-        }
-
-        .slot {
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #555;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            color: white;
-        }
-
-        .slot.active {
-            border-color: var(--accent);
-            box-shadow: 0 0 10px var(--accent);
-        }
-
-        #dialog {
-            position: absolute;
-            bottom: 10%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #000;
-            padding: 10px 30px;
-            border-radius: 30px;
-            border: 2px solid var(--accent);
-            text-align: center;
-            display: none;
-            z-index: 20;
-        }
-
-        #loading {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: gold;
-        }
-    </style>
-    <script
-        type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } } </script>
+    <meta name="description"
+        content="O Guardião do Porão - Um jogo de puzzle e aventura 2.5D ambientado em um porão misterioso.">
+    <title>O Guardião do Porão</title>
+    <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
     <div id="game-container">
         <canvas id="bg"></canvas>
-        <div id="ui">
+
+        <!-- UI Overlay -->
+        <div id="ui-overlay">
             <div id="inventory">
-                <div class="slot" id="s1"></div>
-                <div class="slot" id="s2"></div>
-                <div class="slot" id="s3"></div>
+                <div class="slot" id="slot-1" title="Faca Curta"></div>
+                <div class="slot" id="slot-2" title="Pistola Velha"></div>
+                <div class="slot" id="slot-3" title="Cetro Rúnico"></div>
             </div>
-            <div id="dialog"></div>
-            <div
-                style="background: rgba(0,0,0,0.6); padding: 10px; border-radius: 5px; width: fit-content; pointer-events: all; border-left: 4px solid var(--accent);">
-                <b>MISSÃO:</b> <span id="goal">Encoste nas portas coloridas para entrar nas salas.</span><br>
-                [WASD] Mover | [ESPAÇO] Puzzle/Ataque | [1,2,3] Armas
+
+            <div id="dialog-box" class="hidden">
+                <p id="dialog-text"></p>
+                <button id="close-dialog">Continuar</button>
             </div>
+
+            <div id="status-bar">
+                <div id="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+                <div id="weapon-name">Mãos Vazias</div>
+            </div>
+
+            <div id="interaction-prompt" class="hidden">Pressione [E] para interagir</div>
         </div>
-        <div id="loading">
-            <h1>CARREGANDO...</h1>
+
+        <div id="loading-screen">
+            <h1>O Guardião do Porão</h1>
+            <div class="loader"></div>
+            <p>Entrando nas profundezas...</p>
         </div>
     </div>
-
-    <script type="module">
-        import * as THREE from 'three';
-
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x222233);
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-
-        const state = { room: 'HUB', weapons: [], current: -1, p1: [], p2: 0, loading: false };
-        const player = {
-            mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshBasicMaterial({ color: 0x00aaff })),
-            pos: new THREE.Vector3(0, 1, 10),
-            speed: 0.3
-        };
-        scene.add(player.mesh);
-
-        const activeObjects = [];
-
-        function clear() {
-            const list = [];
-            scene.traverse(c => { if (c.userData.dyn) list.push(c); });
-            list.forEach(o => scene.remove(o));
-            activeObjects.length = 0;
-        }
-
-        function load(name) {
-            if (state.loading) return;
-            state.loading = true;
-            clear();
-            state.room = name;
-
-            if (name === 'HUB') {
-                const f = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshBasicMaterial({ color: 0x333333 }));
-                f.rotation.x = -Math.PI / 2; f.userData.dyn = true; scene.add(f);
-                createObj(15, 0, 4, 6, 0xff4444, 'S1', 'PORTA');
-                createObj(-15, 0, 4, 6, 0x44ff44, 'S2', 'PORTA');
-                createObj(0, -15, 4, 6, 0x4444ff, 'S3', 'PORTA');
-                const tp = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 6), new THREE.MeshBasicMaterial({ color: 0x111111 }));
-                tp.userData = { dyn: true, type: 'TP' }; scene.add(tp); activeObjects.push(tp);
-                player.pos.set(0, 1, 5);
-            }
-            else if (name === 'S1') {
-                createFloor(0x201010);
-                for (let i = 0; i < 4; i++) createObj(-6 + i * 4, -5, 1, 2, 0xff0000, 'L' + i, 'PUZZLE_L');
-                createExit(); player.pos.set(0, 1, 12);
-            }
-            else if (name === 'S2') {
-                createFloor(0x102010);
-                for (let i = 0; i < 3; i++) {
-                    createObj(-5 + i * 5, 0, 3, 0.1, 0x555555, 'P' + i, 'PUZZLE_P');
-                    const s = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: [0x00ffff, 0xff00ff, 0xffff00][i] }));
-                    s.position.set(-5 + i * 5, 4, -8); s.userData.dyn = true; scene.add(s);
-                }
-                createExit(); player.pos.set(0, 1, 12);
-            }
-            else if (name === 'S3') {
-                createFloor(0x101020);
-                createObj(0, -20, 2, 2, 0xd4af37, 'RELIC', 'PUZZLE_R');
-                createExit(); player.pos.set(0, 1, 25);
-            }
-            else if (name === 'BOSS') {
-                createFloor(0x0a0a0a);
-                buildBoss(); player.pos.set(0, 1, 15);
-            }
-
-            setTimeout(() => { state.loading = false; }, 500);
-        }
-
-        function createFloor(c) {
-            const f = new THREE.Mesh(new THREE.PlaneGeometry(30, 60), new THREE.MeshBasicMaterial({ color: c }));
-            f.rotation.x = -Math.PI / 2; f.userData.dyn = true; scene.add(f);
-        }
-
-        function createObj(x, z, w, h, col, id, type) {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 2), new THREE.MeshBasicMaterial({ color: col }));
-            m.position.set(x, h / 2, z);
-            if (x !== 0 && state.room === 'HUB') m.rotation.y = Math.PI / 2;
-            m.userData = { dyn: true, id: id, type: type };
-            scene.add(m); activeObjects.push(m);
-        }
-
-        function createExit() {
-            const e = new THREE.Mesh(new THREE.BoxGeometry(5, 6, 1), new THREE.MeshBasicMaterial({ color: 0x444444 }));
-            e.position.set(0, 3, 14); e.userData = { dyn: true, type: 'EXIT' };
-            scene.add(e); activeObjects.push(e);
-        }
-
-        let heads = [];
-        function buildBoss() {
-            const b = new THREE.Group(); b.userData.dyn = true;
-            const body = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 8), new THREE.MeshBasicMaterial({ color: 0x442222 }));
-            b.add(body);
-            const cols = [0xff0000, 0x00ff00, 0x0000ff];
-            heads = [];
-            for (let i = 0; i < 3; i++) {
-                const h = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshBasicMaterial({ color: cols[i] }));
-                h.position.set(-2.5 + i * 2.5, 4, 4); h.userData = { id: i, hp: 100 };
-                b.add(h); heads.push(h);
-            }
-            b.position.set(0, 2, -10); scene.add(b);
-        }
-
-        // Lógica de Colisão Automática (Para Portas)
-        function checkCollisions() {
-            if (state.loading) return;
-            activeObjects.forEach(o => {
-                const dist = player.mesh.position.distanceTo(o.position);
-                if (dist < 2.5) {
-                    if (o.userData.type === 'PORTA') load(o.userData.id);
-                    if (o.userData.type === 'EXIT') load('HUB');
-                    if (o.userData.type === 'TP' && state.weapons.length === 3) load('BOSS');
-                }
-            });
-        }
-
-        // Interação Manual (Para Puzzles)
-        function interact() {
-            activeObjects.forEach(o => {
-                if (player.mesh.position.distanceTo(o.position) < 3.5) {
-                    if (o.userData.type === 'PUZZLE_L') {
-                        if (o.material.color.getHex() === 0x00ff00) return;
-                        o.material.color.set(0x00ff00); state.p1.push(o.userData.id);
-                        if (state.p1.length === 4) {
-                            if (JSON.stringify(state.p1) === '["L1","L3","L0","L2"]') { msg("FACA OBTIDA!"); getW(1, "🗡️"); }
-                            else { msg("ERROU!"); state.p1 = []; activeObjects.filter(x => x.userData.type === 'PUZZLE_L').forEach(x => x.material.color.set(0xff0000)); }
-                        }
-                    }
-                    if (o.userData.type === 'PUZZLE_P') {
-                        const stepId = parseInt(o.userData.id.replace('P', ''));
-                        if (stepId === state.p2) {
-                            o.material.color.set(0x00ffff); state.p2++;
-                            if (state.p2 === 3) { msg("PISTOLA OBTIDA!"); getW(2, "🔫"); }
-                        } else { msg("REINICIANDO!"); state.p2 = 0; activeObjects.filter(x => x.userData.type === 'PUZZLE_P').forEach(x => x.material.color.set(0x555555)); }
-                    }
-                    if (o.userData.type === 'PUZZLE_R') { msg("CETRO OBTIDO!"); getW(3, "🔮"); o.visible = false; }
-                }
-            });
-            if (state.room === 'BOSS') attack();
-        }
-
-        function getW(id, icon) {
-            const names = ["Faca Curta", "Pistola Velha", "Cetro Rúnico"];
-            if (!state.weapons.includes(names[id - 1])) {
-                state.weapons.push(names[id - 1]);
-                document.getElementById('s' + id).innerText = icon;
-            }
-        }
-
-        function attack() {
-            if (state.current === -1) return;
-            heads.forEach(h => {
-                const wp = new THREE.Vector3(); h.getWorldPosition(wp);
-                if (player.mesh.position.distanceTo(wp) < 10 && h.visible) {
-                    const w = state.weapons[state.current];
-                    let hit = (h.userData.id === 0 && w.includes("Faca")) || (h.userData.id === 1 && w.includes("Pistola")) || (h.userData.id === 2 && w.includes("Cetro"));
-                    if (hit) { h.userData.hp -= 34; h.scale.multiplyScalar(0.8); msg("DANO!"); if (h.userData.hp <= 0) h.visible = false; }
-                    else msg("ARMA ERRADA!");
-                }
-            });
-            if (heads.every(h => !h.visible)) { msg("VITÓRIA FINAL!"); setTimeout(() => location.reload(), 5000); }
-        }
-
-        const keys = {};
-        window.onkeydown = e => {
-            keys[e.key.toLowerCase()] = true;
-            if (e.key === ' ') interact();
-            if (['1', '2', '3'].includes(e.key) && state.weapons[parseInt(e.key) - 1]) {
-                state.current = parseInt(e.key) - 1;
-                document.querySelectorAll('.slot').forEach((s, i) => s.classList.toggle('active', i === state.current));
-            }
-        };
-        window.onkeyup = e => keys[e.key.toLowerCase()] = false;
-
-        function update() {
-            if (state.loading) return;
-            if (keys.w) player.pos.z -= 0.35; if (keys.s) player.pos.z += 0.35;
-            if (keys.a) player.pos.x -= 0.35; if (keys.d) player.pos.x += 0.35;
-            player.mesh.position.copy(player.pos);
-            checkCollisions();
-            camera.position.set(player.pos.x, 25, player.pos.z + 18);
-            camera.lookAt(player.pos);
-        }
-
-        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
-        function msg(t) { const d = document.getElementById('dialog'); d.innerText = t; d.style.display = 'block'; setTimeout(() => d.style.display = 'none', 3000); }
-
-        load('HUB');
-        animate();
-        setTimeout(() => document.getElementById('loading').style.display = 'none', 1000);
-    </script>
+    <script type="module" src="./main.js"></script>
 </body>
 
 </html>

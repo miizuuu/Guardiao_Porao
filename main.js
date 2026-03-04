@@ -1,247 +1,277 @@
 import * as THREE from 'three';
 
-// --- CONFIGURAÇÃO DA CENA ---
+// Configurações Básicas
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050508);
-scene.fog = new THREE.Fog(0x050508, 5, 40);
+scene.background = new THREE.Color(0x050505);
+scene.fog = new THREE.Fog(0x050505, 5, 25);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
 
-const ambient = new THREE.AmbientLight(0x404040, 0.6);
-scene.add(ambient);
+// Texturas
+const textureLoader = new THREE.TextureLoader();
+const floorTexture = textureLoader.load('./assets/floor.png');
+const wallTexture = textureLoader.load('./assets/wall.png');
+const heroTexture = textureLoader.load('./assets/hero.png');
 
-// --- ESTADO DO JOGO ---
+floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+floorTexture.repeat.set(10, 10);
+
+wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+wallTexture.repeat.set(4, 1);
+
+// Iluminação
+const ambientLight = new THREE.AmbientLight(0x404040, 0.3); // Mais escuro para atmosfera
+scene.add(ambientLight);
+
+const torchLight = new THREE.PointLight(0xffaa00, 20, 15); // Luz de tocha quente
+torchLight.castShadow = true;
+scene.add(torchLight);
+
+// Variáveis de Jogo
 const player = {
     mesh: null,
-    hp: 100,
-    speed: 0.18,
-    inventory: [], // 'Faca', 'Pistola', 'Cetro'
-    currentWeapon: -1,
-    canInteract: true
+    speed: 0.1,
+    health: 100,
+    inventory: [],
+    currentWeapon: null
 };
 
-const keys = {};
-const gameObjects = [];
-let currentRoom = 1;
+const keys = { w: false, a: false, s: false, d: false, e: false };
 
-// --- MUNDO E CORREDORES ---
-function createWorld() {
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 250), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+// --- Criação do Mundo (Porão Melhorado) ---
+function createBasement() {
+    // Chão
+    const floorGeo = new THREE.PlaneGeometry(50, 50);
+    const floorMat = new THREE.MeshStandardMaterial({
+        map: floorTexture,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.z = -100;
+    floor.receiveShadow = true;
     scene.add(floor);
 
-    // Paredes indicativas de fim de sala
-    for (let i = 1; i <= 4; i++) {
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 1), new THREE.MeshStandardMaterial({ color: 0x0a0a0a }));
-        wall.position.set(0, 5, -30 * i);
-        scene.add(wall);
-    }
+    // Paredes da Sala 1
+    const wallMat = new THREE.MeshStandardMaterial({
+        map: wallTexture,
+        roughness: 0.9
+    });
+
+    // Parede Norte
+    const wallN = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 1), wallMat);
+    wallN.position.set(0, 5, -10);
+    wallN.receiveShadow = true;
+    scene.add(wallN);
+
+    // Parede Sul (atrás da câmera inicial)
+    const wallS = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 1), wallMat);
+    wallS.position.set(0, 5, 15);
+    scene.add(wallS);
+
+    // Parede Oeste
+    const wallW = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 26), wallMat);
+    wallW.position.set(-10, 5, 2.5);
+    scene.add(wallW);
+
+    // Parede Leste
+    const wallE = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 26), wallMat);
+    wallE.position.set(10, 5, 2.5);
+    scene.add(wallE);
+
+    // Alavancas (Agora com visual melhor)
+    createLever(new THREE.Vector3(-4, 1.5, -9), 0);
+    createLever(new THREE.Vector3(0, 1.5, -9), 1);
+    createLever(new THREE.Vector3(4, 1.5, -9), 2);
 }
 
-// --- JOGADOR (BILLBOARD) ---
-function setupPlayer() {
-    player.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true }));
-    player.mesh.position.y = 1.1;
+const levers = [];
+let leverSequence = [];
+const correctSequence = [0, 2, 1];
+
+function createLever(position, id) {
+    const group = new THREE.Group();
+
+    // Base da alavanca
+    const baseGeo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    group.add(base);
+
+    // Haste
+    const handleGeo = new THREE.CylinderGeometry(0.05, 0.05, 1);
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+    const handle = new THREE.Mesh(handleGeo, handleMat);
+    handle.position.y = 0.5;
+    handle.rotation.z = Math.PI / 4;
+    group.add(handle);
+
+    group.position.copy(position);
+    group.userData = { id: id, active: false, handle: handle };
+    scene.add(group);
+    levers.push(group);
+}
+
+// --- Jogador (Billboard 2.5D com Sprite Real) ---
+function createPlayer() {
+    const geo = new THREE.PlaneGeometry(2, 3);
+    const mat = new THREE.MeshStandardMaterial({
+        map: heroTexture,
+        transparent: true,
+        side: THREE.FrontSide,
+        alphaTest: 0.5
+    });
+    player.mesh = new THREE.Mesh(geo, mat);
+    player.mesh.position.y = 1.5;
+    player.mesh.castShadow = true;
     scene.add(player.mesh);
-
-    const torch = new THREE.PointLight(0xffaa22, 15, 12);
-    torch.position.y = 1;
-    player.torch = torch;
-    scene.add(torch);
 }
 
-// --- PUZZLES ---
-let boss;
-let heads = [];
+// --- Controles ---
+window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
-function setupPuzzles() {
-    // Sala 1: Alavancas (Sequência)
-    const seq = [];
-    const correct = [1, 2, 0];
-    for (let i = 0; i < 3; i++) {
-        const l = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-        l.position.set(-4 + i * 4, 1, -15);
-        l.userData = {
-            type: 'lever', id: i,
-            interact: () => {
-                if (l.material.color.getHex() === 0x00ff00) return;
-                l.material.color.set(0x00ff00);
-                seq.push(i);
-                if (seq.length === 3) {
-                    if (JSON.stringify(seq) === JSON.stringify(correct)) {
-                        notify("VOCÊ ENCONTROU A FACA CURTA!");
-                        collectWeapon("Faca Curta", "🗡️");
-                    } else {
-                        notify("ORDEM ERRADA. RESETANDO...");
-                        seq.length = 0;
-                        gameObjects.filter(o => o.userData.type === 'lever').forEach(o => o.material.color.set(0xff0000));
-                    }
-                }
-            }
-        };
-        scene.add(l);
-        gameObjects.push(l);
-    }
+function handleMovement() {
+    const prevPos = player.mesh.position.clone();
 
-    // Sala 2: Cristais
-    const crystalCols = [0xff0000, 0x00ff00, 0x0000ff];
-    crystalCols.forEach((c, i) => {
-        const crys = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshStandardMaterial({ color: c, emissive: c }));
-        crys.position.set(-3 + i * 3, 1, -45);
-        crys.userData = {
-            interact: () => {
-                if (player.inventory.length === 1 && i === 1) { // Só desbloqueia se tiver a faca e for o cristal certo
-                    notify("PISTOLA VELHA OBTIDA!");
-                    collectWeapon("Pistola Velha", "🔫");
-                    crys.visible = false;
-                }
-            }
-        };
-        scene.add(crys);
-        gameObjects.push(crys);
-    });
-
-    // Sala 4: O CÉRBERO
-    boss = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 6), new THREE.MeshStandardMaterial({ color: 0x220000 }));
-    boss.add(body);
-    const hTypes = [0xff4444, 0x44ff44, 0x4444ff]; // Cores das fraquezas
-    hTypes.forEach((col, i) => {
-        const h = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshStandardMaterial({ color: col }));
-        h.position.set(-1.8 + i * 1.8, 2.5, 3.5);
-        h.userData = { id: i, hp: 100 };
-        boss.add(h);
-        heads.push(h);
-    });
-    boss.position.set(0, 1.5, -120);
-    scene.add(boss);
-}
-
-// --- MECÂNICAS ---
-function collectWeapon(name, icon) {
-    player.inventory.push(name);
-    const slot = document.getElementById(`slot-${player.inventory.length}`);
-    slot.innerText = icon;
-    slot.classList.add('active');
-    switchWeapon(player.inventory.length - 1);
-}
-
-function switchWeapon(index) {
-    if (index >= player.inventory.length) return;
-    player.currentWeapon = index;
-    document.getElementById('weapon-name').innerText = player.inventory[index];
-    document.querySelectorAll('.slot').forEach((s, i) => {
-        s.classList.toggle('active', i === index);
-    });
-}
-
-function attack() {
-    if (player.currentWeapon === -1) return;
-    const currentWpnName = player.inventory[player.currentWeapon];
-
-    heads.forEach(h => {
-        const dist = player.mesh.position.distanceTo(boss.position.clone().add(h.position));
-        if (dist < 10 && h.userData.hp > 0) {
-            let hit = false;
-            if (h.userData.id === 0 && currentWpnName === "Faca Curta") hit = true;
-            if (h.userData.id === 1 && currentWpnName === "Pistola Velha") hit = true;
-            if (h.userData.id === 2 && currentWpnName === "Cetro Rúnico") hit = true; // Placeholder sala 3
-
-            if (hit) {
-                h.userData.hp -= 34;
-                h.scale.multiplyScalar(0.8);
-                notify("DANO CRÍTICO NA CABEÇA!");
-                if (h.userData.hp <= 0) {
-                    h.visible = false;
-                    notify("CABEÇA DESTRUÍDA!");
-                }
-            } else {
-                notify("ESSA ARMA NÃO FUNCIONA AQUI!");
-            }
-        }
-    });
-
-    if (heads.every(h => h.userData.hp <= 0)) {
-        notify("O CÉRBERO CAIU! VOCÊ ESCAPOU DO PORÃO.");
-        setTimeout(() => location.reload(), 6000);
-    }
-}
-
-function notify(text) {
-    const box = document.getElementById('dialog-box');
-    const content = document.getElementById('dialog-text');
-    content.innerText = text;
-    box.classList.remove('hidden');
-    box.classList.remove('show');
-    void box.offsetWidth;
-    box.classList.add('show');
-}
-
-// --- CONTROLES ---
-window.addEventListener('keydown', e => {
-    keys[e.key.toLowerCase()] = true;
-    if (e.key === '1') switchWeapon(0);
-    if (e.key === '2') switchWeapon(1);
-    if (e.key === '3') switchWeapon(2);
-    if (e.key === ' ') attack();
-});
-window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-
-// --- LOOP ---
-function update() {
     if (keys.w) player.mesh.position.z -= player.speed;
     if (keys.s) player.mesh.position.z += player.speed;
     if (keys.a) player.mesh.position.x -= player.speed;
     if (keys.d) player.mesh.position.x += player.speed;
 
-    player.mesh.position.x = Math.max(-8, Math.min(8, player.mesh.position.x));
+    // Colisão simples com as paredes do porão
+    if (Math.abs(player.mesh.position.x) > 9) player.mesh.position.x = prevPos.x;
+    if (player.mesh.position.z < -8.5 || player.mesh.position.z > 14) player.mesh.position.z = prevPos.z;
 
-    // Suavização da Câmera
-    const targetCam = new THREE.Vector3(player.mesh.position.x, 6, player.mesh.position.z + 10);
-    camera.position.lerp(targetCam, 0.1);
-    camera.lookAt(player.mesh.position);
+    // Câmera segue o jogador suavemente
+    const targetCamPos = new THREE.Vector3(
+        player.mesh.position.x,
+        player.mesh.position.y + 6,
+        player.mesh.position.z + 10
+    );
+    camera.position.lerp(targetCamPos, 0.1);
+    camera.lookAt(player.mesh.position.x, player.mesh.position.y + 1, player.mesh.position.z);
 
-    player.torch.position.copy(player.mesh.position).add(new THREE.Vector3(0, 1.5, 1));
-    player.mesh.rotation.y = Math.atan2(camera.position.x - player.mesh.position.x, camera.position.z - player.mesh.position.z);
+    // Luz da tocha segue o jogador com um pequeno balanço
+    torchLight.position.set(
+        player.mesh.position.x,
+        player.mesh.position.y + 2 + Math.sin(Date.now() * 0.002) * 0.1,
+        player.mesh.position.z + 1
+    );
 
-    // Colisões e Interações
-    gameObjects.forEach(obj => {
-        if (player.mesh.position.distanceTo(obj.position) < 1.5 && player.canInteract) {
-            obj.userData.interact();
-            player.canInteract = false;
-            setTimeout(() => player.canInteract = true, 500);
+    // Efeito Billboard
+    player.mesh.rotation.y = Math.atan2(
+        camera.position.x - player.mesh.position.x,
+        camera.position.z - player.mesh.position.z
+    );
+}
+
+// --- Interação e Puzzle ---
+function checkInteractions() {
+    let nearObject = false;
+    levers.forEach(lever => {
+        const distance = player.mesh.position.distanceTo(lever.position);
+        if (distance < 2) {
+            nearObject = true;
+            showInteractionPrompt("Pressione [E] para usar a alavanca");
+            if (keys.e) {
+                if (!lever.userData.active) {
+                    activateLever(lever);
+                }
+                keys.e = false; // Debounce
+            }
         }
     });
 
-    // Boss Move
-    if (boss && player.mesh.position.z < -80) {
-        boss.position.x = Math.sin(Date.now() * 0.0015) * 6;
+    if (!nearObject) {
+        hideInteractionPrompt();
     }
 }
 
+function activateLever(lever) {
+    lever.userData.active = true;
+    lever.userData.handle.rotation.z = -Math.PI / 4;
+    leverSequence.push(lever.userData.id);
+
+    console.log("Sequência:", leverSequence);
+
+    if (leverSequence.length === correctSequence.length) {
+        if (JSON.stringify(leverSequence) === JSON.stringify(correctSequence)) {
+            showDialog("Sequência Correta! Um compartimento secreto se abriu... Você encontrou a Faca Curta.");
+            addToInventory("Faca Curta", "slot-1", "🗡️");
+        } else {
+            showDialog("As alavancas travam e resetam com um som metálico. Talvez haja uma ordem certa.");
+            setTimeout(resetLevers, 1000);
+        }
+    }
+}
+
+function resetLevers() {
+    leverSequence = [];
+    levers.forEach(l => {
+        l.userData.active = false;
+        l.userData.handle.rotation.z = Math.PI / 4;
+    });
+}
+
+// --- UI Helpers ---
+function showDialog(text) {
+    const box = document.getElementById('dialog-box');
+    const content = document.getElementById('dialog-text');
+    content.innerText = text;
+    box.classList.add('visible');
+}
+
+document.getElementById('close-dialog').addEventListener('click', () => {
+    document.getElementById('dialog-box').classList.remove('visible');
+});
+
+function showInteractionPrompt(text) {
+    const prompt = document.getElementById('interaction-prompt');
+    prompt.innerText = text;
+    prompt.classList.add('visible');
+}
+
+function hideInteractionPrompt() {
+    document.getElementById('interaction-prompt').classList.remove('visible');
+}
+
+function addToInventory(name, slotId, icon) {
+    const slot = document.getElementById(slotId);
+    slot.classList.add('active');
+    slot.innerHTML = `<span style="font-size: 2rem">${icon}</span>`;
+    player.inventory.push(name);
+    player.currentWeapon = name;
+    document.getElementById('weapon-name').innerText = name;
+}
+
+// --- Loop Principal ---
 function animate() {
     requestAnimationFrame(animate);
-    update();
+
+    handleMovement();
+    checkInteractions();
+
     renderer.render(scene, camera);
 }
 
-// INICIALIZAÇÃO
-createWorld();
-setupPlayer();
-setupPuzzles();
+// Inicialização
+createBasement();
+createPlayer();
 animate();
 
+// Esconder loading após carregar
 window.addEventListener('load', () => {
     setTimeout(() => {
-        document.getElementById('loading-screen').style.display = 'none';
-        notify("ONDE ESTOU? PRECISO SAIR DAS PROFUNDEZAS...");
-    }, 1500);
+        document.getElementById('loading-screen').style.opacity = '0';
+        setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 1000);
+    }, 1000);
 });
 
+// Ajuste de janela
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
