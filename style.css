@@ -2,9 +2,12 @@
 
 :root {
     --gold: #ffcc00;
-    --blue: #00d4ff;
+    --orange: #ff7700;
     --red: #ff3333;
-    --ui-bg: rgba(0, 0, 0, 0.6);
+    --magical-purple: #9d00ff;
+    --magical-green: #33ff33;
+    --bg-dark: #0a0510;
+    --ui-bg: rgba(15, 5, 20, 0.85);
 }
 
 * {
@@ -15,7 +18,7 @@
 }
 
 body {
-    background: #111;
+    background: var(--bg-dark);
     overflow: hidden;
 }
 
@@ -33,7 +36,7 @@ body {
     height: 100%;
 }
 
-/* HUD NOVO - ALTA VISIBILIDADE */
+/* HUD NOVO - ALTA VISIBILIDADE E CORES VIBRANTES */
 #ui-layer {
     position: absolute;
     inset: 0;
@@ -58,23 +61,24 @@ body {
 }
 
 .slot {
-    width: 65px;
-    height: 65px;
+    width: 70px;
+    height: 70px;
     background: var(--ui-bg);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
+    border: 2px solid var(--magical-purple);
+    border-radius: 15px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
+    font-size: 2.5rem;
     transition: 0.3s;
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 15px rgba(157, 0, 255, 0.2);
 }
 
 .slot.active {
     border-color: var(--gold);
-    box-shadow: 0 0 20px rgba(255, 204, 0, 0.4);
-    transform: scale(1.1);
+    box-shadow: 0 0 25px rgba(255, 204, 0, 0.5);
+    transform: scale(1.15) rotate(5deg);
 }
 
 .slot.active::after {
@@ -84,56 +88,79 @@ body {
 #weapon-display {
     color: var(--gold);
     font-weight: 900;
-    letter-spacing: 4px;
-    font-size: 1.2rem;
-    text-shadow: 0 0 10px rgba(0, 0, 0, 1);
+    letter-spacing: 5px;
+    font-size: 1.4rem;
+    text-shadow: 2px 2px 0px rgba(255, 119, 0, 0.5);
+    background: var(--ui-bg);
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--orange);
 }
 
 #interaction-label {
     position: absolute;
-    top: 60%;
+    top: 65%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--gold);
-    color: black;
-    padding: 10px 30px;
+    background: linear-gradient(45deg, var(--gold), var(--orange));
+    color: #000;
+    padding: 12px 35px;
     font-weight: 900;
-    border-radius: 30px;
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
-    animation: pulse 1s infinite;
+    border-radius: 40px;
+    box-shadow: 0 0 30px rgba(255, 204, 0, 0.6);
+    letter-spacing: 2px;
+    font-size: 1.1rem;
+    animation: bounceScale 0.8s infinite alternate ease-in-out;
 }
 
 #msg-box {
     position: absolute;
-    bottom: 40px;
+    bottom: 50px;
     left: 50%;
     transform: translateX(-50%);
-    width: 80%;
-    max-width: 600px;
+    width: 85%;
+    max-width: 650px;
     background: var(--ui-bg);
-    border-left: 6px solid var(--blue);
-    padding: 25px;
-    border-radius: 4px;
-    backdrop-filter: blur(15px);
+    border: 2px solid var(--magical-green);
+    border-left: 10px solid var(--magical-green);
+    padding: 30px;
+    border-radius: 15px;
+    backdrop-filter: blur(20px);
     pointer-events: all;
     cursor: pointer;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+}
+
+#msg-text {
+    font-size: 1.15rem;
+    color: #fff;
+    line-height: 1.5;
+    margin-bottom: 5px;
+}
+
+small {
+    color: var(--magical-green);
+    font-weight: 900;
+    letter-spacing: 1px;
 }
 
 #health-hud {
     position: absolute;
     bottom: 30px;
     left: 30px;
-    width: 250px;
-    height: 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    width: 280px;
+    height: 18px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 15px;
+    border: 2px solid var(--red);
     overflow: hidden;
 }
 
 #hp-bar-fill {
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, var(--red), #800);
+    background: linear-gradient(90deg, var(--red), var(--orange));
+    box-shadow: 0 0 15px var(--red);
     transition: 0.5s;
 }
 
@@ -141,7 +168,7 @@ body {
 #loader {
     position: absolute;
     inset: 0;
-    background: #0a0a0f;
+    background: var(--bg-dark);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -150,37 +177,48 @@ body {
 }
 
 #loader h1 {
-    font-size: 4rem;
-    letter-spacing: 15px;
+    font-size: 5rem;
+    letter-spacing: 20px;
     color: white;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
+    text-shadow: 0 0 30px var(--magical-purple);
 }
 
 .progress {
-    width: 300px;
-    height: 4px;
-    background: #222;
+    width: 400px;
+    height: 6px;
+    background: #221133;
+    border-radius: 10px;
+    overflow: hidden;
 }
 
 #progress-fill {
     width: 0%;
     height: 100%;
-    background: var(--gold);
-    transition: 0.2s;
+    background: linear-gradient(90deg, var(--magical-purple), var(--magical-green));
+    box-shadow: 0 0 20px var(--magical-green);
 }
 
-@keyframes pulse {
-
-    0%,
-    100% {
+@keyframes bounceScale {
+    from {
         transform: translate(-50%, -50%) scale(1);
     }
 
-    50% {
-        transform: translate(-50%, -50%) scale(1.1);
+    to {
+        transform: translate(-50%, -50%) scale(1.15);
     }
 }
 
 .hidden {
     display: none !important;
+}
+
+/* VIGNETTE COLORIDA */
+#game-container::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, transparent 30%, rgba(50, 0, 50, 0.3) 100%);
+    pointer-events: none;
+    z-index: 5;
 }
