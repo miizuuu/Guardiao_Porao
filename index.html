@@ -4,155 +4,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CÉRBERO: O Guardião</title>
-    <style>
-        body,
-        html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #050510;
-        }
-
-        #bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-
-        #ui {
-            position: fixed;
-            inset: 0;
-            z-index: 10;
-            pointer-events: none;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        #loader {
-            position: fixed;
-            inset: 0;
-            background: #0a0510;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 1s ease;
-        }
-
-        #loader h1 {
-            font-size: 3rem;
-            letter-spacing: 15px;
-            color: #ffaa00;
-            text-shadow: 0 0 20px #ff7700;
-            margin: 0;
-        }
-
-        .bar-bg {
-            width: 300px;
-            height: 6px;
-            background: #221133;
-            border-radius: 10px;
-            margin-top: 30px;
-            overflow: hidden;
-            border: 1px solid #442266;
-        }
-
-        #bar {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #ff7700, #ffcc00);
-            box-shadow: 0 0 15px #ff7700;
-            transition: width 0.4s;
-        }
-
-        #msg-box {
-            position: absolute;
-            bottom: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(15, 5, 25, 0.9);
-            padding: 25px 50px;
-            border-radius: 15px;
-            border: 2px solid #ff7700;
-            pointer-events: all;
-            cursor: pointer;
-            text-align: center;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-        }
-
-        #interact-hint {
-            position: absolute;
-            top: 65%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #ffaa00;
-            color: #000;
-            padding: 12px 30px;
-            font-weight: bold;
-            border-radius: 30px;
-            box-shadow: 0 0 20px #ffaa00;
-            animation: pulse 1s infinite alternate;
-        }
-
-        @keyframes pulse {
-            from {
-                transform: translate(-50%, -50%) scale(1);
-            }
-
-            to {
-                transform: translate(-50%, -50%) scale(1.1);
-            }
-        }
-
-        .hidden {
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-    </style>
+    <title>O Guardião do Porão - Investigação 3D</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div id="loader">
-        <h1>CÉRBERO</h1>
-        <div class="bar-bg">
-            <div id="bar"></div>
+    <div id="ui-container">
+        <div id="crosshair"></div>
+        <div id="instructions">
+            <h1>O Guardião do Porão</h1>
+            <p>Clique para Iniciar</p>
+            <p>(WASD para mover, MOUSE para olhar, E para interagir, CLIQUE para atacar)</p>
         </div>
+        <div id="controls-hint">
+            <h3>Comandos</h3>
+            <ul>
+                <li>[WASD] Mover</li>
+                <li>[MOUSE] Olhar</li>
+                <li>[E] Interagir</li>
+                <li>[CLICK] Atacar</li>
+                <li>[1-3/Scroll] Itens</li>
+            </ul>
+        </div>
+        <div id="inventory">
+            <div id="slot-0" class="slot active">🔦</div>
+            <div id="slot-1" class="slot">🔑</div>
+            <div id="slot-2" class="slot">⚔️</div>
+        </div>
+        <div id="health-container">
+            <div id="health-bar"></div>
+        </div>
+        <div id="messages"></div>
     </div>
 
-    <canvas id="bg"></canvas>
-
-    <div id="ui">
-        <div id="interact-hint" class="hidden">PRESSIONE [E]</div>
-        <div id="msg-box" class="hidden">
-            <p id="msg-text" style="font-size: 1.2rem; margin: 0 0 10px 0;"></p>
-            <small style="color: #ffaa00; font-weight: bold;">CLIQUE PARA FECHAR</small>
-        </div>
-    </div>
-
+    <!-- Import Map for Three.js -->
     <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-    }
     </script>
-    <script type="module" src="./main.js"></script>
-
-    <script>
-        // SISTEMA ANTI-TRAVAMENTO: Se o jogo não carregar em 4 segundos, remove o loader na marra
-        setTimeout(() => {
-            const loader = document.getElementById('loader');
-            if (loader) loader.classList.add('hidden');
-        }, 4000);
-    </script>
+    <script type="module" src="main.js"></script>
 </body>
 
 </html>

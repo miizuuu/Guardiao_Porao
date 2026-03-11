@@ -1,259 +1,370 @@
 import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-/**
- * CÉRBERO: O Guardião - Código Estável
- * ------------------------------------
- * Hub Central -> Sala 1 -> Sala 2 -> Sala 3 -> Boss
- */
-
-const clock = new THREE.Clock();
+// --- CONFIGURAÇÃO BÁSICA ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0510);
-scene.fog = new THREE.Fog(0x0a0510, 5, 60);
+scene.background = new THREE.Color(0x020202);
+scene.fog = new THREE.FogExp2(0x020202, 0.12);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 1.6, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.BasicShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
 
-// --- LUZES ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-const glow = new THREE.PointLight(0xffaa00, 40, 60);
-glow.position.set(0, 12, 0);
-scene.add(glow);
-
-// --- ASSETS ---
+// --- CARREGAMENTO DE TEXTURAS ---
 const texLoader = new THREE.TextureLoader();
-// Ajuste automático de caminho para GitHub Pages ou Local
-const path = window.location.href.includes('github.io') ? './assets/' : './public/assets/';
-
-const createMat = (file, color) => {
-    const mat = new THREE.MeshStandardMaterial({ color });
-    texLoader.load(path + file, (t) => {
-        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-        mat.map = t;
-        mat.needsUpdate = true;
-    }, undefined, () => console.warn("Asset não encontrado: " + file));
-    return mat;
+const textures = {
+    floor: texLoader.load('assets/textures/floor.png'),
+    wall: texLoader.load('assets/textures/wall.png'),
+    wood: texLoader.load('assets/textures/wood.png')
 };
 
-const matFloor = createMat('floor.png', 0x554433);
-const matWall = createMat('wall.png', 0xaa5544);
-
-// SPRITE DO HERÓI (Animado 4x1)
-const matHero = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, alphaTest: 0.5 });
-texLoader.load(path + 'hero.png', (t) => {
-    t.magFilter = THREE.NearestFilter;
-    t.repeat.set(0.25, 1);
-    matHero.map = t;
-    matHero.needsUpdate = true;
-}, undefined, () => {
-    matHero.color.set(0x00ff00);
-    matHero.transparent = false;
+Object.values(textures).forEach(tex => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
 });
 
-// --- ESTADO ---
-const game = {
-    player: { mesh: null, speed: 0.2, frame: 0, timer: 0, dir: 1 },
-    walls: [],
-    doors: {},
-    interactables: [],
-    leverSeq: [], symbolSeq: [], orbSeq: [],
-    input: { w: false, a: false, s: false, d: false, e: false }
+// --- LUZES ---
+const ambientLight = new THREE.AmbientLight(0x4040a0, 0.1);
+scene.add(ambientLight);
+
+// Lanterna
+const flashlight = new THREE.SpotLight(0xffffff, 80);
+flashlight.angle = Math.PI / 7;
+flashlight.penumbra = 0.4;
+flashlight.decay = 1.8;
+flashlight.distance = 35;
+flashlight.castShadow = true;
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+// --- ESTADO DO JOGO ---
+const gameState = {
+    hasKey: false,
+    hasSword: false,
+    doorOpen: false,
+    boardsBroken: false,
+    cerberusHealth: 10,
+    playerHealth: 100,
+    isGameOver: false,
+    selectedSlot: 0,
+    inventory: [true, false, false]
 };
 
-// --- MUNDO ---
-function addBox(w, h, d, x, y, z, mat, isWall = true) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    mesh.receiveShadow = true;
-    mesh.castShadow = true;
-    m.position.set(x, y, z);
-    scene.add(m);
-    if (isWall) game.walls.push(new THREE.Box3().setFromObject(m));
-    return m;
+const itemsInScene = { key: null, sword: null, door: null, boards: null, cerberus: null, torches: [] };
+
+// --- COLISÕES OTIMIZADAS ---
+const collidableObjects = [];
+const collisionBoxes = [];
+function addCollidable(mesh) {
+    collidableObjects.push(mesh);
+    const box = new THREE.Box3().setFromObject(mesh);
+    collisionBoxes.push(box);
 }
 
-function createOpening(x, z, rotY, doorId, doorCol) {
-    const group = new THREE.Group();
-    // Vãos da parede
-    const l = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall); l.position.set(-6, 5, 0);
-    const r = new THREE.Mesh(new THREE.BoxGeometry(7, 10, 1), matWall); r.position.set(6, 5, 0);
-    const t = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 1), matWall); t.position.set(0, 8.5, 0);
-    // A Porta
-    const door = new THREE.Mesh(new THREE.BoxGeometry(5.2, 7.5, 0.4), new THREE.MeshStandardMaterial({ color: doorCol, emissive: doorCol, emissiveIntensity: 0.5 }));
-    door.position.set(0, 3.7, 0);
+function checkCollision(pos) {
+    const playerRadius = 0.4;
+    for (let i = 0; i < collisionBoxes.length; i++) {
+        if (!collidableObjects[i].visible) continue;
+        const box = collisionBoxes[i];
+        const closestPoint = new THREE.Vector3().copy(pos).clamp(box.min, box.max);
+        if (pos.distanceTo(closestPoint) < playerRadius) return true;
+    }
+    return false;
+}
 
-    group.add(l, r, t, door);
-    group.position.set(x, 0, z);
-    group.rotation.y = rotY;
+// --- AMBIENTE ---
+function createWall(w, h, d, x, y, z, color = 0x555555, name = "wall") {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshStandardMaterial({ map: textures.wall.clone(), color: color, roughness: 1.0 });
+    mat.map.repeat.set(w / 4, h / 4);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.receiveShadow = true; mesh.castShadow = true; mesh.name = name;
+    scene.add(mesh);
+    addCollidable(mesh);
+    return mesh;
+}
+
+function createStandingTorch(x, z) {
+    const group = new THREE.Group();
+    // Base/Pedestal
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8), new THREE.MeshStandardMaterial({ map: textures.wall, color: 0x222222 }));
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 6), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    pole.position.y = 1.1;
+
+    // Cup
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.05, 0.3, 8), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 }));
+    cup.position.y = 2.0;
+
+    // Fire Visual
+    const fire = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+    fire.position.y = 2.15;
+
+    group.add(base, pole, cup, fire);
+    group.position.set(x, 0.2, z);
     scene.add(group);
 
-    game.walls.push(new THREE.Box3().setFromObject(l), new THREE.Box3().setFromObject(r), new THREE.Box3().setFromObject(t));
-    game.doors[doorId] = { mesh: door, box: new THREE.Box3().setFromObject(door), open: false };
+    const light = new THREE.PointLight(0xff6600, 15, 20);
+    light.position.set(x, 2.3, z);
+    light.castShadow = true;
+    scene.add(light);
+
+    itemsInScene.torches.push({ light, fire, baseIntensity: 15 });
 }
 
-function init() {
-    // Chão
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(250, 250), matFloor);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
+// Floor
+const floorGeo = new THREE.PlaneGeometry(250, 250);
+const floorMat = new THREE.MeshStandardMaterial({ map: textures.floor, roughness: 0.9 });
+floorMat.map.repeat.set(50, 50);
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
-    // HUB CENTRAL
-    createOpening(0, -12, 0, 'door1', 0x9d00ff);      // NORTE
-    createOpening(15, 0, Math.PI / 2, 'door2', 0x00ffff);  // LESTE
-    createOpening(-15, 0, -Math.PI / 2, 'door3', 0xffff00); // OESTE
-    const sWall = new THREE.Mesh(new THREE.BoxGeometry(30, 10, 1), matWall);
-    sWall.position.set(0, 5, 15);
-    scene.add(sWall);
-    game.walls.push(new THREE.Box3().setFromObject(sWall));
+// SALAS
+createWall(10, 5, 0.5, 0, 2.5, -5); createWall(10, 5, 0.5, 0, 2.5, 5); createWall(0.5, 5, 10, -5, 2.5, 0);
+createWall(0.5, 5, 4, 5, 2.5, -3); createWall(0.5, 5, 4, 5, 2.5, 3); createWall(0.5, 1.5, 2, 5, 4.25, 0);
+itemsInScene.door = createWall(0.4, 3.5, 2, 5, 1.75, 0, 0x884400, "door");
+createWall(10, 5, 0.5, 10, 2.5, -1.5); createWall(10, 5, 0.5, 10, 2.5, 1.5);
 
-    // Sala 1: Alavancas
-    [-5, 0, 5].forEach((x, i) => {
-        const lev = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2, 1), new THREE.MeshStandardMaterial({ color: 0x332200 }));
-        lev.position.set(x, 1, -28);
-        scene.add(lev);
-        lev.userData = { id: i, type: 'lever', active: false };
-        game.interactables.push(lev);
-    });
+const boardsMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.5, 3), new THREE.MeshStandardMaterial({ map: textures.wood }));
+boardsMesh.position.set(15, 1.75, 0); scene.add(boardsMesh);
+itemsInScene.boards = boardsMesh;
+addCollidable(boardsMesh);
 
-    // Sala 2: Símbolos
-    ["🔯", "☯️", "⚛️"].forEach((icon, i) => {
-        const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
-        const ctx = canvas.getContext('2d'); ctx.fillStyle = '#00ffff'; ctx.font = 'bold 90px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon, 64, 64);
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, emissive: 0x00ffff, emissiveIntensity: 0.5 }));
-        m.position.set(29.4, 4, -5 + i * 5); m.rotation.y = -Math.PI / 2;
-        m.userData = { id: i, type: 'symbol', active: false };
-        scene.add(m); game.interactables.push(m);
-    });
+// SALA BOSS
+const bS = 60; const bO = 15;
+createWall(bS, 12, 1, bO + bS / 2, 6, -bS / 2);
+createWall(bS, 12, 1, bO + bS / 2, 6, bS / 2);
+createWall(1, 12, bS, bO + bS, 6, 0);
+createWall(1, 12, (bS - 3) / 2, bO, 6, -(bS + 3) / 4);
+createWall(1, 12, (bS - 3) / 2, bO, 6, (bS + 3) / 4);
 
-    // Sala 3: Orbes
-    [0xff3300, 0x33ff33, 0x9d00ff].forEach((col, i) => {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 2 }));
-        m.position.set(-29.4, 3, -5 + i * 5);
-        m.userData = { id: i, type: 'orb', active: false };
-        scene.add(m); game.interactables.push(m);
-    });
-
-    // Herói
-    game.player.mesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 6), matHero);
-    game.player.mesh.position.set(0, 3, 5);
-    scene.add(game.player.mesh);
+// Torches on floor
+for (let i = 0; i < 3; i++) {
+    createStandingTorch(25 + i * 15, -15);
+    createStandingTorch(25 + i * 15, 15);
 }
 
-// --- LOGICA ---
-function update() {
-    const dt = clock.getDelta();
-    const p = game.player;
-    if (!p.mesh) return;
+// ITENS
+const keyMesh = new THREE.Mesh(
+    new THREE.TorusGeometry(0.15, 0.05, 12, 24),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1, roughness: 0.1, emissive: 0x442200 })
+);
+keyMesh.position.set(-3, 0.6, -3); keyMesh.name = "key"; scene.add(keyMesh);
+itemsInScene.key = keyMesh;
 
-    let mx = 0, mz = 0;
-    if (game.input.w) mz -= p.speed;
-    if (game.input.s) mz += p.speed;
-    if (game.input.a) { mx -= p.speed; p.dir = -1; }
-    if (game.input.d) { mx += p.speed; p.dir = 1; }
+const sword = new THREE.Group();
+const sBlade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.3, 0.2), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.9, roughness: 0.1 }));
+const sHilt = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.1, 0.2), new THREE.MeshStandardMaterial({ color: 0x331100 }));
+sHilt.position.y = -0.65; sword.add(sBlade, sHilt); sword.position.set(8, 0.7, 0); scene.add(sword);
+itemsInScene.sword = sword;
 
-    if (mx !== 0 || mz !== 0) {
-        const pB = new THREE.Box3().setFromObject(p.mesh).expandByScalar(-0.4);
+// CÉRBERO ÉPICO
+const cerberus = new THREE.Group();
+const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.8, 4), new THREE.MeshStandardMaterial({ map: textures.wall, color: 0x220000 }));
+cerberus.add(bodyMesh);
 
-        // Colisão X
-        pB.translate(new THREE.Vector3(mx, 0, 0));
-        let hitX = game.walls.some(w => pB.intersectsBox(w)) ||
-            Object.values(game.doors).some(d => !d.open && pB.intersectsBox(d.box));
-        if (!hitX) p.mesh.position.x += mx;
+// Legs
+function createLeg(x, z) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), new THREE.MeshStandardMaterial({ color: 0x110000 }));
+    leg.position.set(x, -0.9, z);
+    return leg;
+}
+cerberus.add(createLeg(1, 1.5), createLeg(-1, 1.5), createLeg(1, -1.5), createLeg(-1, -1.5));
 
-        // Colisão Z
-        pB.setFromObject(p.mesh).expandByScalar(-0.4).translate(new THREE.Vector3(0, 0, mz));
-        let hitZ = game.walls.some(w => pB.intersectsBox(w)) ||
-            Object.values(game.doors).some(d => !d.open && pB.intersectsBox(d.box));
-        if (!hitZ) p.mesh.position.z += mz;
+// heads
+function createEpicHead(x, y, z, rotationY) {
+    const h = new THREE.Group();
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 1), new THREE.MeshStandardMaterial({ color: 0x330000 }));
+    neck.rotation.x = Math.PI / 3;
+    const skull = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.6), new THREE.MeshStandardMaterial({ color: 0x330000 }));
+    skull.position.z = 0.8; skull.position.y = 0.4;
 
-        if (matHero.map) {
-            p.timer += dt * 10;
-            matHero.map.offset.x = (Math.floor(p.timer) % 4) * 0.25;
+    // Glowing red eyes
+    const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const eR = new THREE.Mesh(eyeGeo, eyeMat); const eL = new THREE.Mesh(eyeGeo, eyeMat);
+    eR.position.set(0.3, 0.6, 1.4); eL.position.set(-0.3, 0.6, 1.4);
+
+    h.add(neck, skull, eR, eL);
+    h.position.set(x, y, z);
+    h.rotation.y = rotationY;
+    return h;
+}
+cerberus.add(createEpicHead(0.8, 0.5, 1.8, 0.5), createEpicHead(-0.8, 0.5, 1.8, -0.5), createEpicHead(0, 1.2, 1.8, 0));
+
+cerberus.position.set(50, 1.8, 0); cerberus.name = "cerberus";
+scene.add(cerberus); addCollidable(bodyMesh);
+itemsInScene.cerberus = cerberus;
+
+// --- CONTROLES E UI ---
+const controls = new PointerLockControls(camera, document.body);
+const instructions = document.getElementById('instructions');
+instructions.addEventListener('click', () => { if (!gameState.isGameOver) controls.lock(); });
+controls.addEventListener('lock', () => instructions.style.display = 'none');
+controls.addEventListener('unlock', () => { if (!gameState.isGameOver) instructions.style.display = 'block'; });
+
+const moveState = { f: 0, b: 0, l: 0, r: 0 };
+const velocity = new THREE.Vector3();
+document.addEventListener('keydown', (e) => {
+    if (gameState.isGameOver) return;
+    if (e.code === 'KeyW') moveState.f = 1; if (e.code === 'KeyS') moveState.b = 1;
+    if (e.code === 'KeyA') moveState.l = 1; if (e.code === 'KeyD') moveState.r = 1;
+    if (e.code === 'KeyE') interact();
+    if (e.key === '1') { gameState.selectedSlot = 0; updateInventoryUI(); }
+    if (e.key === '2') { gameState.selectedSlot = 1; updateInventoryUI(); }
+    if (e.key === '3') { gameState.selectedSlot = 2; updateInventoryUI(); }
+});
+document.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyW') moveState.f = 0; if (e.code === 'KeyS') moveState.b = 0;
+    if (e.code === 'KeyA') moveState.l = 0; if (e.code === 'KeyD') moveState.r = 0;
+});
+document.addEventListener('mousedown', () => { if (controls.isLocked) attack(); });
+document.addEventListener('wheel', (e) => {
+    if (!controls.isLocked || gameState.isGameOver) return;
+    gameState.selectedSlot = (gameState.selectedSlot + (e.deltaY > 0 ? 1 : -1) + 3) % 3;
+    updateInventoryUI();
+});
+
+const raycaster = new THREE.Raycaster();
+function showMessage(text) {
+    const el = document.getElementById('messages');
+    el.innerText = text;
+    if (!gameState.isGameOver) setTimeout(() => { if (el.innerText === text) el.innerText = ''; }, 3000);
+}
+
+function updateInventoryUI() {
+    for (let i = 0; i < 3; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        if (!slot) continue;
+        slot.classList.remove('active');
+        if (gameState.inventory[i]) slot.classList.add('obtained');
+        if (gameState.selectedSlot === i) slot.classList.add('active');
+    }
+    flashlight.visible = (gameState.selectedSlot === 0);
+}
+
+function updateHealthUI() {
+    document.getElementById('health-bar').style.width = `${gameState.playerHealth}%`;
+}
+
+function interact() {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    if (intersects.length > 0 && intersects[0].distance < 3) {
+        const obj = intersects[0].object;
+        if (obj === itemsInScene.key || obj.name === "key") {
+            gameState.inventory[1] = true; itemsInScene.key.visible = false;
+            updateInventoryUI(); showMessage("VOCÊ PRESSENTE QUE ESTE OURO ABRIRÁ CAMINHOS.");
+        } else if (obj === itemsInScene.door && !gameState.doorOpen) {
+            if (gameState.inventory[1] && gameState.selectedSlot === 1) {
+                gameState.doorOpen = true; itemsInScene.door.visible = false;
+                showMessage("A PORTA CEDE AO TOQUE DA CHAVE RELUZENTE.");
+            } else showMessage("DURA COMO PEDRA... PRECISO DE ALGO PARA ABRIR.");
+        } else if (obj.parent === itemsInScene.sword || obj.name === "sword") {
+            gameState.inventory[2] = true; itemsInScene.sword.visible = false;
+            updateInventoryUI(); showMessage("A LÂMINA PRATEADA ESTÁ PRONTA PARA O SANGUE.");
         }
+    }
+}
+
+function attack() {
+    if (gameState.selectedSlot !== 2 || !gameState.inventory[2]) return;
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    if (intersects.length > 0 && intersects[0].distance < 4.5) {
+        const obj = intersects[0].object;
+        if (obj === itemsInScene.boards) {
+            gameState.boardsBroken = true; itemsInScene.boards.visible = false;
+            showMessage("MADEIRAS ESTRALHAM!");
+        }
+        let hit = false; let c = obj;
+        while (c) { if (c === itemsInScene.cerberus) { hit = true; break; } c = c.parent; }
+        if (hit) {
+            gameState.cerberusHealth--;
+            showMessage(`GOLPE CERTEIRO! O CÉRBERO SENTE A LÂMINA.`);
+            if (gameState.cerberusHealth <= 0) {
+                itemsInScene.cerberus.visible = false;
+                endGame(true);
+            }
+        }
+    }
+}
+
+function endGame(victory) {
+    gameState.isGameOver = true;
+    controls.unlock();
+    document.getElementById('ui-container').style.display = 'none';
+    if (victory) {
+        document.getElementById('final-screen-victory').classList.add('active');
     } else {
-        if (matHero.map) matHero.map.offset.x = 0;
+        document.getElementById('final-screen-defeat').classList.add('active');
     }
-    p.mesh.scale.x = Math.abs(p.mesh.scale.x) * p.dir;
-
-    camera.position.lerp(new THREE.Vector3(p.mesh.position.x, 10, p.mesh.position.z + 16), 0.1);
-    camera.lookAt(p.mesh.position.x, 2, p.mesh.position.z);
-    p.mesh.rotation.y = Math.atan2(camera.position.x - p.mesh.position.x, camera.position.z - p.mesh.position.z);
-
-    // Interação
-    let near = false;
-    for (let obj of game.interactables) {
-        if (p.mesh.position.distanceTo(obj.position) < 5) {
-            near = true;
-            document.getElementById('interact-hint').classList.remove('hidden');
-            if (game.input.e) {
-                handleInteraction(obj);
-                game.input.e = false;
-            }
-            break;
-        }
-    }
-    if (!near) document.getElementById('interact-hint').classList.add('hidden');
 }
 
-function handleInteraction(obj) {
-    const d = obj.userData;
-    if (d.type === 'lever' && !d.active) {
-        d.active = true; obj.material.color.set(0xffaa00);
-        game.leverSeq.push(d.id);
-        if (game.leverSeq.length === 3) {
-            if (JSON.stringify(game.leverSeq) === "[0,2,1]") {
-                showMsg("PORTA NORTE ABERTA!"); game.doors.door1.open = true;
-                const a = () => { game.doors.door1.mesh.position.y += 0.2; if (game.doors.door1.mesh.position.y < 11) requestAnimationFrame(a); }; a();
-            } else {
-                showMsg("RESET."); game.leverSeq = [];
-                game.interactables.filter(o => o.userData.type === 'lever').forEach(o => { o.userData.active = false; o.material.color.set(0x332200); });
-            }
-        }
-    }
-    if (d.type === 'symbol' && !d.active) {
-        d.active = true; obj.material.emissiveIntensity = 3;
-        game.symbolSeq.push(d.id);
-        if (game.symbolSeq.length === 3) {
-            if (JSON.stringify(game.symbolSeq) === "[2,0,1]") {
-                showMsg("PORTA LESTE ABERTA!"); game.doors.door2.open = true;
-                const a = () => { game.doors.door2.mesh.position.y += 0.2; if (game.doors.door2.mesh.position.y < 11) requestAnimationFrame(a); }; a();
-            } else {
-                showMsg("RESET."); game.symbolSeq = [];
-                game.interactables.filter(o => o.userData.type === 'symbol').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 0.5; });
-            }
-        }
-    }
-    if (d.type === 'orb' && !d.active) {
-        d.active = true; obj.material.emissiveIntensity = 5;
-        game.orbSeq.push(d.id);
-        if (game.orbSeq.length === 3) {
-            if (JSON.stringify(game.orbSeq) === "[1,0,2]") {
-                showMsg("PORTA OESTE ABERTA!"); game.doors.door3.open = true;
-                const a = () => { game.doors.door3.mesh.position.y += 0.2; if (game.doors.door3.mesh.position.y < 11) requestAnimationFrame(a); }; a();
-            } else {
-                showMsg("RESET."); game.orbSeq = [];
-                game.interactables.filter(o => o.userData.type === 'orb').forEach(o => { o.userData.active = false; o.material.emissiveIntensity = 2; });
-            }
+let cerberusLastAttack = 0;
+function updateCerberusIA(delta) {
+    if (!itemsInScene.cerberus.visible || gameState.isGameOver) return;
+    const boss = itemsInScene.cerberus;
+    const dist = boss.position.distanceTo(camera.position);
+
+    if (gameState.boardsBroken || dist < 18) {
+        const targetAngle = Math.atan2(camera.position.x - boss.position.x, camera.position.z - boss.position.z);
+        boss.rotation.y = THREE.MathUtils.lerp(boss.rotation.y, targetAngle, 3 * delta);
+
+        if (dist > 3.5) {
+            const dir = new THREE.Vector3().subVectors(camera.position, boss.position).normalize();
+            boss.position.x += dir.x * 6 * delta;
+            boss.position.z += dir.z * 6 * delta;
+            boss.position.y = 1.8 + Math.sin(performance.now() * 0.01) * 0.3;
+        } else if (performance.now() - cerberusLastAttack > 1000) {
+            gameState.playerHealth -= 25; updateHealthUI();
+            showMessage("CARNE RASGADA! O CÉRBERO TE ALCANÇOU.");
+            cerberusLastAttack = performance.now();
+            if (gameState.playerHealth <= 0) endGame(false);
         }
     }
 }
 
-function showMsg(t) {
-    const mb = document.getElementById('msg-box');
-    document.getElementById('msg-text').innerText = t;
-    mb.classList.remove('hidden');
-    mb.onclick = () => mb.classList.add('hidden');
+let prevTime = performance.now();
+function animate() {
+    requestAnimationFrame(animate);
+    const time = performance.now();
+    const delta = Math.min((time - prevTime) / 1000, 0.1);
+
+    itemsInScene.torches.forEach(t => {
+        t.light.intensity = t.baseIntensity + Math.sin(time * 0.005) * 2 + Math.random() * 0.5;
+        t.fire.scale.setScalar(1 + Math.sin(time * 0.02) * 0.1);
+    });
+
+    if (controls.isLocked && !gameState.isGameOver) {
+        velocity.x -= velocity.x * 10 * delta; velocity.z -= velocity.z * 10 * delta;
+        if (moveState.f) velocity.z -= 60 * delta; if (moveState.b) velocity.z += 60 * delta;
+        if (moveState.l) velocity.x -= 60 * delta; if (moveState.r) velocity.x += 60 * delta;
+
+        const old = camera.position.clone();
+        controls.moveForward(-velocity.z * delta);
+        if (checkCollision(camera.position)) camera.position.copy(old);
+        const mid = camera.position.clone();
+        controls.moveRight(-velocity.x * delta);
+        if (checkCollision(camera.position)) camera.position.copy(mid);
+
+        flashlight.position.copy(camera.position);
+        flashlight.target.position.copy(camera.position).add(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion));
+
+        updateCerberusIA(delta);
+    }
+    renderer.render(scene, camera);
+    prevTime = time;
 }
 
-const loop = () => { requestAnimationFrame(loop); update(); renderer.render(scene, camera); };
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
-window.addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (game.input.hasOwnProperty(k)) game.input[k] = true; });
-window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (game.input.hasOwnProperty(k)) game.input[k] = false; });
-window.onresize = () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); };
-
-// BOOT
-init();
-loop();
-setTimeout(() => document.getElementById('loader').classList.add('hidden'), 500);
+updateInventoryUI(); updateHealthUI(); animate();
