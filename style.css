@@ -198,3 +198,58 @@ body {
     background: var(--primary);
     color: #000;
 }
+
+/* FINAL SCREENS */
+.final-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: black;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.final-screen.active {
+    display: flex;
+}
+
+.final-screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    animation: fadeInScale 2.5s ease-out;
+}
+
+.final-screen .caption {
+    position: absolute;
+    bottom: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 40px;
+    font-size: 1.8rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    border-top: 4px solid var(--primary);
+    text-align: center;
+    width: 80%;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(1.1);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
