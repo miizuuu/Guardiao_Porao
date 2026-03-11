@@ -350,7 +350,7 @@ function animate() {
         controls.moveForward(-velocity.z * delta);
         if (checkCollision(camera.position)) camera.position.copy(old);
         const mid = camera.position.clone();
-        controls.moveRight(-velocity.x * delta);
+        controls.moveRight(velocity.x * delta);
         if (checkCollision(camera.position)) camera.position.copy(mid);
 
         flashlight.position.copy(camera.position);
